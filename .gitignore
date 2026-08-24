@@ -1,0 +1,10 @@
+# No data should ever be pushed to remote, as it contains sensitive patient information,
+# so let git ignore all files in the three possible data folders.
+# However, I would still like to have the empty data folders present in my remote
+# repo for aesthetic reasons, so place .gitkeep in the folders
+/data/processed/*
+!/data/processed/.gitkeep
+/data/raw/*
+!/data/raw/.gitkeep
+/data/temporary/*
+!/data/temporary/.gitkeep
