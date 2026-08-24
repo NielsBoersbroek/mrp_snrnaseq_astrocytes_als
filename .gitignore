@@ -13,7 +13,7 @@
 !/data/temporary/.gitkeep
 
 
-## Create empty result folders ------------------------------------------------
+## Ignore result folders ------------------------------------------------
 
 
 # Figures and tables created via results should not be pushed to remote either,
@@ -22,3 +22,11 @@
 !/results/figures/.gitkeep
 /results/tables/*
 !/results/tables/.gitkeep
+
+
+## Ignore other files ---------------------------------------------------
+
+
+# I use VS code and have a json set with specific settings, but these do not have to
+# present in the remote repo
+/.vscode/settings.json
