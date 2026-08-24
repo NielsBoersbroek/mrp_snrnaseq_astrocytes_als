@@ -1,3 +1,6 @@
+## Ignore data folders --------------------------------------------------
+
+
 # No data should ever be pushed to remote, as it contains sensitive patient information,
 # so let git ignore all files in the three possible data folders.
 # However, I would still like to have the empty data folders present in my remote
@@ -8,3 +11,14 @@
 !/data/raw/.gitkeep
 /data/temporary/*
 !/data/temporary/.gitkeep
+
+
+## Create empty result folders ------------------------------------------------
+
+
+# Figures and tables created via results should not be pushed to remote either,
+# but I would also like to keep them as empty folders.
+/results/figures/*
+!/results/figures/.gitkeep
+/results/tables/*
+!/results/tables/.gitkeep
