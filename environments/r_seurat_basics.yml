@@ -1,0 +1,14 @@
+name: r_seurat_basics
+channels: 
+- conda-forge
+- bioconda
+dependencies:
+- r-base=4.5.2
+- r-seurat=5.5
+- r-tidyverse=2
+- r-harmony
+- r-clustree
+- leidenalg # needed to run Leiden algorithm in Seurat::FindClusters()
+- r-seuratdisk # Needed to convert Seurat to AnnData (for Python)
+- r-languageserver # to use R language service on VS Code
+- r-jsonlite # to use R language service on VS Code
