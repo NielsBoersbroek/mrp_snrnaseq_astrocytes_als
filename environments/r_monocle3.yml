@@ -1,0 +1,12 @@
+name: r_monocle3
+channels: 
+- conda-forge
+- bioconda
+dependencies:
+- r-base=4.4
+- r-seurat=5.5
+- r-tidyverse=2
+- r-monocle3=1.4.26
+- r-languageserver # to use R language service on VS Code
+- r-devtools # For installing r-seuratwrappers
+- bioconductor-tradeseq

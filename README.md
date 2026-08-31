@@ -31,3 +31,8 @@ hdWGCNA is not available via conda; after creating `r_scrnaseq_core`, run:
 ```
 Rscript -e "devtools::install_github('smorabit/hdWGCNA', ref='dev')"
 ```
+
+`r_monocle3` requires seuratwrappers, which is also not available via conda; after creating `r_monocle3`, run:
+```
+Rscript -e "devtools::install_github('satijalab/seurat-wrappers')"
+```

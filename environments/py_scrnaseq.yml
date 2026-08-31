@@ -1,0 +1,7 @@
+name: py_scrnaseq
+channels: 
+- conda-forge
+- bioconda
+dependencies:
+- python=3.12
+- sccoda=0.1.9
