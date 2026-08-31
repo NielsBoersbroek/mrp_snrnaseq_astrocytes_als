@@ -10,14 +10,24 @@ The directory structure of this repo is as follows:
 tree
 ```
 
-## Prerequisites
+## Environments
 
-The scripts were ran using conda environments, for which .yml scripts are specified in `/environments/`. I had to make multiple conda environments, as some of the used packages required their own dependency tree. Each script specifies at the top which conda environment requires it - though most names speak for themselves.
+This project uses 3 conda environments (see `/environments/`):
 
+| Environment           | Used by                           | Notes                     |
+|-----------------------|-----------------------------------|---------------------------|
+| `r_scrnaseq_core`     | Scripts 01–03, 05, 07, 08         | General Seurat/tidyverse + slingshot, milo, hdWGCNA |
+| `r_monocle3`          | 06_monocle3.R                     | Isolated: requires an older `bioconductor-singlecellexperiment` than other packages (slingshot and milo), which caused a solver conflict |
+| `py_scrnaseq`         | 04_sccoda.py                      | Python environment        |
+
+Monocle3 required an older `bioconductor-singlecellexperiment` than other packages (slingshot and milo), which caused a solver conflict when combined and is why it is a seperate environment.
+
+To create an environment, run: 
 ```
-Lookup table of which script requires which environment
+mamba env create -f environments/<name>.yml
 ```
 
+hdWGCNA is not available via conda; after creating `r_scrnaseq_core`, run:
 ```
-line to run to activate conda environment
+Rscript -e "devtools::install_github('smorabit/hdWGCNA', ref='dev')"
 ```
