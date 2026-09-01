@@ -10,6 +10,7 @@ dependencies:
 - r-clustree
 - leidenalg=0.12.0 # needed to run Leiden algorithm in Seurat::FindClusters()
 - r-languageserver # to use R language service on VS Code
+- r-rmarkdown
 # For script 05_slingshot
 - bioconductor-slingshot=2.18
 - bioconductor-tradeseq=1.24.0
