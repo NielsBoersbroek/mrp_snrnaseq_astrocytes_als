@@ -16,12 +16,14 @@
 ## Ignore result folders ------------------------------------------------
 
 
-# Figures and tables created via results should not be pushed to remote either,
-# but I would also like to keep them as empty folders.
+# Figures, tables and reports created via results should not be pushed to remote
+# either, but I would also like to keep them as empty folders.
 /results/figures/*
 !/results/figures/.gitkeep
 /results/tables/*
 !/results/tables/.gitkeep
+/results/reports/*
+!/results/reports/.gitkeep
 
 
 ## Ignore other files ---------------------------------------------------
