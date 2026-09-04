@@ -1,0 +1,224 @@
+---
+title: "Subsetting Astrocytes"
+author: "Niels Boersbroek"
+date: "2026-09-04"
+output: 
+  html_document:
+   toc: true
+   theme: united
+
+---
+
+# About this Rscript
+
+This is the first script of this project. In this project, I analysed single-
+nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20
+ALS patients and 4 controls, focusing on astrocytes. In this script, I will open
+the full dataset (with all celltypes), examine the astrocytes (e.g. what 
+proportion of total cells they form per sample), and subset the astrocytes.
+
+## Conda environment
+
+This script was run with the *conda environment* `r_scrnaseq_core`.
+
+``` {r 01_setup, include = FALSE} 
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Defining variables
+
+The first code block defines variables to be used throughout the rest of the
+document. Users can adapt these if desired.
+
+``` {r, 02_defining variables}
+astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
+```
+
+
+## Prerequisites
+
+``` {r 02_packages_directories}
+##  Open packages --------------------------------------------------------------
+
+library(Seurat)
+library(tidyverse)
+library(knitr)
+
+
+##  Set directories ------------------------------------------------------------
+
+dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
+
+# Data directories
+dir_data <- paste0(dir_home, "/data/raw/")
+
+# Results directories
+dir_fig <- paste0(dir_home, "/results/figures/01_subsetting_astros/")
+dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
+
+
+## Helper functions ------------------------------------------------------------
+
+save_plot <- function(p, filename, width = 10, height = 10) {
+  ggsave(
+    paste0(dir_fig, filename), p,
+    width = width, height = height, dpi = 150
+  )
+  png_name <- sub("\\.pdf$", ".png", filename)
+  ggsave(
+    paste0(dir_fig, png_name), p,
+    width = width, height = height, dpi = 150
+  )
+  cat("  Saved: ", filename, " + ", png_name)
+}
+```
+
+# Astrocytes in the dataset with all celltypes
+
+## Load Seurat in from disk
+
+The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which 
+Charlotte shared with me after her full QC.
+
+``` {r 03_open_seurat}
+file_rds <- paste0(dir_data, "seu_spinal_allcelltypes_shortread_postQC.rds")
+seu <- readRDS(file_rds)
+# Test whether it loaded in correctly
+seu
+```
+
+## Visualization annotation all celltypes
+
+Charlotte defined major cell types using a publicly available atlas of the human
+spinal cord of the Allan Brain Insitute. These are stored in the columns 
+`predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_cellclass`,
+with the former having a more refined annotation than the latter.
+
+``` {r 04_umap_subclass}
+# I want to show both subclass and cellclass. First show subclass
+p_allen_subclass <- DimPlot(
+  seu,
+  reduction = "umap",
+  group.by = "predicted.id_coarse_allen_subclass",
+  label = TRUE,
+  repel = TRUE
+) +
+  NoLegend() +
+  ggtitle("UMAP after filtering - Allen subclass")
+p_allen_subclass
+```
+
+``` {r 05_umap_cellclass}
+p_allen_cellclass <- DimPlot(
+  seu,
+  reduction = "umap",
+  group.by = "predicted.id_coarse_allen_cellclass",
+  label = TRUE,
+  repel = TRUE
+) +
+  NoLegend() +
+  ggtitle("UMAP after filtering - Allen cellclass")
+ggsave(
+  paste0(dir_fig, "allcelltypes_umap_alancellclass.png"),
+  height = 8,
+  width = 10
+)
+p_allen_cellclass
+```
+
+```{r 06_save_plots, echo = FALSE}
+# Store the plots, but keep this hidden for the output
+save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass.pdf")
+save_plot(p_allen_cellclass, "allcelltypes_umap_alancellclass.pdf")
+```
+
+## Visualization astrocyte markers
+
+A FeaturePlot() with astrocyte-marker genes forms a quick way to validate the 
+astrocyte cluster. In the default settings of this document, I provided the
+astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`.
+
+``` {r 07_featureplot}
+p_feature <- FeaturePlot(
+  seu,
+  features = astro_markers,
+  reduction = "umap"
+)
+p_feature
+```
+
+```{r 08_save_plots, echo = FALSE}
+# Store the plot, but keep this hidden for the output
+save_plot(p_feature, "allcelltypes_featureplot.pdf")
+```
+
+## Visualization astrocyte frequency
+
+Add text
+
+``` {r 09_preprocessing_freq}
+metadata <- seu@meta.data |>
+  as.data.frame()
+# Make a Boolean-like astrocyte-non-astrocyte column
+metadata$astro <- ifelse(
+  test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
+  yes = "Astrocyte",
+  no = "Non-Astrocyte"
+)
+freq_table <- table(
+  metadata$astro,
+  metadata$AnonymousID
+) |>
+  as.data.frame()
+colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
+
+# Inspect what this dataframe looks like
+head(freq_table)
+```
+
+``` {r 10_absolute_freq}
+p_abs <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = c("#EF2400", "grey")) +
+  theme(axis.text.x = element_text(angle = 90)) # otherwise unreadable x-axis
+p_abs
+```
+
+``` {r 11_proportional_freq}
+p_prop <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_manual(values = c("#EF2400", "grey")) + # red-grey = easy to read
+  theme(axis.text.x = element_text(angle = 90))
+p_prop
+```
+
+```{r 12_save_plots, echo = FALSE}
+# Store the plot, but keep this hidden for the output
+save_plot(p_abs, "allcelltypes_barplot_abs.pdf")
+save_plot(p_prop, "allcelltypes_barplot_prop.pdf")
+```
+
+# Subset astrocytes and save on disk
+
+``` {r 13_subset_astros}
+seu_astros <- subset(
+  seu,
+  subset = predicted.id_coarse_allen_subclass == "Astrocytes"
+)
+# Inspect
+seu_astros
+```
+
+I want the astrocytes saved in the raw folder still.
+
+``` {r 14_save_to_disk}
+file_rds <- paste0(dir_data, "seu_spinal_astros_shortread_postQC.rds")
+saveRDS(seu_astros, file_rds)
+```
+
+# Session info
+
+``` {r 15_sessioninfo}
+sessionInfo()
+```
