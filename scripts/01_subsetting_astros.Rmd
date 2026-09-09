@@ -36,13 +36,15 @@ library(knitr)
 
 ##  Set directories ------------------------------------------------------------
 
+
+# Now forms a hardcoded 'bug' - I will fix this later, using the package here
 dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
 
 # Data directories
-dir_data <- paste0(dir_home, "/data/raw/")
+dir_data <- file.path(dir_home, "data/raw")
 
 # Results directories
-dir_fig <- paste0(dir_home, "/results/figures/01_subsetting_astros/")
+dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
 dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
 ```
 
@@ -52,13 +54,12 @@ dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
 
 This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the ggplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
 ``` {r xx_helpers}
+# file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6) {
-  # .png file
-  png_name <- paste0(dir_fig, filename, ".png")
-  ggsave(png_name, p, width = width, height = height, dpi = 150)
-  # .pdf file
-  pdf_name <- paste0(dir_fig, filename, ".pdf")
-  ggsave(pdf_name, p, width = width, height = height, dpi = 150)
+  png_file <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(png_file, p, width = width, height = height, dpi = 150)
+  pdf_file <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(pdf_file, p, width = width, height = height, dpi = 150)
 }
 ```
 
