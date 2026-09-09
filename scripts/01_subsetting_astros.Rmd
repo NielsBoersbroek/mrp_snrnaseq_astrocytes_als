@@ -9,7 +9,7 @@ output:
 
 ---
 
-# About this Rscript
+# Subsetting Astrocytes from All Celltype-Seurat
 
 This is the first script of this project. In this project, I analysed single-
 nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20
@@ -17,26 +17,14 @@ ALS patients and 4 controls, focusing on astrocytes. In this script, I will open
 the full dataset (with all celltypes), examine the astrocytes (e.g. what 
 proportion of total cells they form per sample), and subset the astrocytes.
 
-## Conda environment
-
-This script was run with the *conda environment* `r_scrnaseq_core`.
-
 ``` {r 01_setup, include = FALSE} 
 # Manage settings for code chunks throughout the document
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-## Defining variables
+# Prerequisites
 
-The first code block defines variables to be used throughout the rest of the
-document. Users can adapt these if desired.
-
-``` {r, 02_defining variables}
-astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
-```
-
-
-## Prerequisites
+This script was run with the *conda environment* `r_scrnaseq_core`.
 
 ``` {r 02_packages_directories}
 ##  Open packages --------------------------------------------------------------
@@ -56,10 +44,11 @@ dir_data <- paste0(dir_home, "/data/raw/")
 # Results directories
 dir_fig <- paste0(dir_home, "/results/figures/01_subsetting_astros/")
 dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
+```
 
+## Helper functions
 
-## Helper functions ------------------------------------------------------------
-
+``` {r xx_helpers}
 # Images I will make in this document will be visible in the output of this
 # markdown file, but I'll also want the images saved to disk, both as .pdf
 # and .png
@@ -74,6 +63,15 @@ save_plot <- function(p, filename, width = 10, height = 10) {
     width = width, height = height, dpi = 150
   )
 }
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the
+document. Users can adapt these if desired.
+
+``` {r, 02_defining variables}
+astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
 # Astrocytes in the dataset with all celltypes
@@ -159,7 +157,7 @@ I want to show how many astrocytes each sample has. I will show both the
 absolute frequency and the relative frequency.
 
 ``` {r 09_preprocessing_freq}
-# Create a dataframe which contains the count of astrocyte- and 
+# Create a dataframe which contains the count of astrocyte- and
 # non-astrocyte-cells of each participant
 metadata <- seu@meta.data |>
   as.data.frame()
@@ -176,17 +174,17 @@ freq_table <- table(
   as.data.frame()
 colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
 
-# The levels aren't ordered like I want: it's in the order ALS1, ALS10, ALS11, 
-# ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. etc. It does not count up from 
+# The levels aren't ordered like I want: it's in the order ALS1, ALS10, ALS11,
+# ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. etc. It does not count up from
 # ALS1 to ALS 9 and then from 10 to 20, becuase ALS1 till ALS 9 is in single
 # digits... I tried to fix it with this ugly fix, but it did not work; I'll
 # leave it for now
 freq_table <- freq_table |>
   mutate(
     Sample = fct_relevel(
-      Sample, 
+      Sample,
       "ALS1", "ALS2", "ALS3", "ALS4", "ALS5", "ALS6", "ALS7", "ALS8", "ALS9"
-      )
+    )
   )
 
 # Inspect what this dataframe looks like
