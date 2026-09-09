@@ -48,20 +48,17 @@ dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
 
 ## Helper functions
 
+### save_plot()
+
+This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the ggplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
 ``` {r xx_helpers}
-# Images I will make in this document will be visible in the output of this
-# markdown file, but I'll also want the images saved to disk, both as .pdf
-# and .png
-save_plot <- function(p, filename, width = 10, height = 10) {
-  ggsave(
-    paste0(dir_fig, filename), p,
-    width = width, height = height, dpi = 150
-  )
-  png_name <- sub("\\.pdf$", ".png", filename)
-  ggsave(
-    paste0(dir_fig, png_name), p,
-    width = width, height = height, dpi = 150
-  )
+save_plot <- function(p, filename, width = 10, height = 6) {
+  # .png file
+  png_name <- paste0(dir_fig, filename, ".png")
+  ggsave(png_name, p, width = width, height = height, dpi = 150)
+  # .pdf file
+  pdf_name <- paste0(dir_fig, filename, ".pdf")
+  ggsave(pdf_name, p, width = width, height = height, dpi = 150)
 }
 ```
 
@@ -124,8 +121,8 @@ p_allen_group
 
 ```{r 06_save_plots, echo = FALSE}
 # Store the plots, but keep this hidden for the output
-save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass.pdf")
-save_plot(p_allen_group, "allcelltypes_umap_alangroup.pdf")
+save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass")
+save_plot(p_allen_group, "allcelltypes_umap_alangroup")
 ```
 
 ## Visualization astrocyte markers
@@ -148,7 +145,7 @@ p_feature
 
 ```{r 08_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
-save_plot(p_feature, "allcelltypes_featureplot.pdf")
+save_plot(p_feature, "allcelltypes_featureplot")
 ```
 
 ## Visualization astrocyte frequency
@@ -209,8 +206,8 @@ p_prop
 
 ```{r 12_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
-save_plot(p_abs, "allcelltypes_barplot_abs.pdf")
-save_plot(p_prop, "allcelltypes_barplot_prop.pdf")
+save_plot(p_abs, "allcelltypes_barplot_abs")
+save_plot(p_prop, "allcelltypes_barplot_prop")
 ```
 
 # Subset astrocytes and save on disk
