@@ -37,7 +37,7 @@ library(knitr)
 ##  Set directories ------------------------------------------------------------
 
 
-# Now forms a hardcoded 'bug' - I will fix this later, using the package here
+# Now forms a hardcoded 'bug' - I will fix this later, using the here package
 dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
 
 # Data directories
@@ -46,6 +46,15 @@ dir_data <- file.path(dir_home, "data/raw")
 # Results directories
 dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
 dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the
+document. Users can adapt these if desired.
+
+``` {r, 02_defining variables}
+astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
 ## Helper functions
@@ -61,15 +70,6 @@ save_plot <- function(p, filename, width = 10, height = 6) {
   pdf_file <- file.path(dir_fig, paste0(filename, ".pdf"))
   ggsave(pdf_file, p, width = width, height = height, dpi = 150)
 }
-```
-
-## Defining variables
-
-This code block defines variables to be used throughout the rest of the
-document. Users can adapt these if desired.
-
-``` {r, 02_defining variables}
-astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
 # Astrocytes in the dataset with all celltypes
