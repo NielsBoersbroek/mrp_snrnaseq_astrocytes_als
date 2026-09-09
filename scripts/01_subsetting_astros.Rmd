@@ -60,6 +60,9 @@ dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
 
 ## Helper functions ------------------------------------------------------------
 
+# Images I will make in this document will be visible in the output of this
+# markdown file, but I'll also want the images saved to disk, both as .pdf
+# and .png
 save_plot <- function(p, filename, width = 10, height = 10) {
   ggsave(
     paste0(dir_fig, filename), p,
@@ -70,7 +73,6 @@ save_plot <- function(p, filename, width = 10, height = 10) {
     paste0(dir_fig, png_name), p,
     width = width, height = height, dpi = 150
   )
-  cat("  Saved: ", filename, " + ", png_name)
 }
 ```
 
@@ -92,15 +94,15 @@ seu
 
 Charlotte defined major cell types using a publicly available atlas of the human
 spinal cord of the Allan Brain Insitute. These are stored in the columns 
-`predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_cellclass`,
-with the former having a more refined annotation than the latter.
+`predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`,
+with the latter having a more subdivided annotation than the former.
 
 ``` {r 04_umap_subclass}
 # I want to show both subclass and cellclass. First show subclass
 p_allen_subclass <- DimPlot(
   seu,
   reduction = "umap",
-  group.by = "predicted.id_coarse_allen_subclass",
+  group.by = "predicted.id_coarse_allen_Subclass",
   label = TRUE,
   repel = TRUE
 ) +
@@ -110,34 +112,32 @@ p_allen_subclass
 ```
 
 ``` {r 05_umap_cellclass}
-p_allen_cellclass <- DimPlot(
+p_allen_group <- DimPlot(
   seu,
   reduction = "umap",
-  group.by = "predicted.id_coarse_allen_cellclass",
+  group.by = "predicted.id_coarse_allen_group",
   label = TRUE,
   repel = TRUE
 ) +
   NoLegend() +
-  ggtitle("UMAP after filtering - Allen cellclass")
-ggsave(
-  paste0(dir_fig, "allcelltypes_umap_alancellclass.png"),
-  height = 8,
-  width = 10
-)
-p_allen_cellclass
+  ggtitle("UMAP after filtering - Allen Group")
+p_allen_group
 ```
 
 ```{r 06_save_plots, echo = FALSE}
 # Store the plots, but keep this hidden for the output
 save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass.pdf")
-save_plot(p_allen_cellclass, "allcelltypes_umap_alancellclass.pdf")
+save_plot(p_allen_group, "allcelltypes_umap_alangroup.pdf")
 ```
 
 ## Visualization astrocyte markers
 
-A FeaturePlot() with astrocyte-marker genes forms a quick way to validate the 
-astrocyte cluster. In the default settings of this document, I provided the
-astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`.
+I previously provided the annotation of celltypes, but I would like to confirm
+that the labelled astrocytes are astrocytes. A FeaturePlot() with 
+astrocyte-marker genes forms a quick way to do so. In the default settings of 
+this document, I provided the astrocyte marker genes 
+`c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster
+expresses these markers.
 
 ``` {r 07_featureplot}
 p_feature <- FeaturePlot(
@@ -155,9 +155,12 @@ save_plot(p_feature, "allcelltypes_featureplot.pdf")
 
 ## Visualization astrocyte frequency
 
-Add text
+I want to show how many astrocytes each sample has. I will show both the
+absolute frequency and the relative frequency.
 
 ``` {r 09_preprocessing_freq}
+# Create a dataframe which contains the count of astrocyte- and 
+# non-astrocyte-cells of each participant
 metadata <- seu@meta.data |>
   as.data.frame()
 # Make a Boolean-like astrocyte-non-astrocyte column
@@ -173,8 +176,21 @@ freq_table <- table(
   as.data.frame()
 colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
 
+# The levels aren't ordered like I want: it's in the order ALS1, ALS10, ALS11, 
+# ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. etc. It does not count up from 
+# ALS1 to ALS 9 and then from 10 to 20, becuase ALS1 till ALS 9 is in single
+# digits... I tried to fix it with this ugly fix, but it did not work; I'll
+# leave it for now
+freq_table <- freq_table |>
+  mutate(
+    Sample = fct_relevel(
+      Sample, 
+      "ALS1", "ALS2", "ALS3", "ALS4", "ALS5", "ALS6", "ALS7", "ALS8", "ALS9"
+      )
+  )
+
 # Inspect what this dataframe looks like
-head(freq_table)
+kable(head(freq_table))
 ```
 
 ``` {r 10_absolute_freq}
@@ -201,6 +217,12 @@ save_plot(p_prop, "allcelltypes_barplot_prop.pdf")
 
 # Subset astrocytes and save on disk
 
+Now that we have inspected the astrocytes in the whole dataset, I can subset
+the astrocytes which I will continue in the rest of the project. I wil subset
+the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, 
+which was visualized in the first image under the header 
+**Visualization annotation all celltypes**.
+
 ``` {r 13_subset_astros}
 seu_astros <- subset(
   seu,
@@ -210,7 +232,9 @@ seu_astros <- subset(
 seu_astros
 ```
 
-I want the astrocytes saved in the raw folder still.
+Even though one could technically call this preprocessed, I will still store
+this subsetted astrocyte file in the folder `data/raw`; it's still a raw Seurat
+object without preprocessing, but  now it's just astrocytes.
 
 ``` {r 14_save_to_disk}
 file_rds <- paste0(dir_data, "seu_spinal_astros_shortread_postQC.rds")
@@ -218,6 +242,10 @@ saveRDS(seu_astros, file_rds)
 ```
 
 # Session info
+
+I used the conda environment `r_scrnaseq_core` to run this script. You can find
+major package versions in the file `/environments/r_scrnaseq_core.yml`, but for
+full reproducibility, I'll display all dependencies and package versions below.
 
 ``` {r 15_sessioninfo}
 sessionInfo()
