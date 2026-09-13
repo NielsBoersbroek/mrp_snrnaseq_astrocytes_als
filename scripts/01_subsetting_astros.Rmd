@@ -10,6 +10,10 @@ output:
 
 ---
 
+## Note to self
+
+This note will be removed later, but I now replaced names of individuals with \[name\], to anonymise it in case I share this document with a LLM. Change this in the final version.
+
 # Subsetting Astrocytes from All Celltype-Seurat
 
 This is the first script of this project. In this project, I analysed single-nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20 ALS patients and 4 controls, focusing on astrocytes. In this script, I will open the full dataset (with all celltypes), examine the astrocytes (e.g. what proportion of total cells they form per sample), and subset the astrocytes.
@@ -73,7 +77,7 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 
 ## Load Seurat in from disk
 
-The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which Charlotte shared with me after her full QC.
+The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which \[name\] shared with me after her full QC.
 
 ``` {r 03_open_seurat}
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
@@ -84,7 +88,7 @@ seu
 
 ## Visualization annotation all celltypes
 
-Charlotte defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
+\[name\] defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
 ``` {r 04_umap_subclass}
 # I want to show both subclass and cellclass. First show subclass
