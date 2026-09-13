@@ -10,6 +10,10 @@ The directory structure of this repo is as follows:
 tree
 ```
 
+## Running scripts
+
+Scripts assume the working directory is the project root (marked by the .here file): open the project in VS Code/RStudio from this root folder, or ensure your SLURM wrapper `cd`s here before rendering.
+
 ## Environments
 
 This project uses 3 conda environments (see `/environments/`):
