@@ -43,6 +43,7 @@ dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
 
 # Data directories
 dir_data <- file.path(dir_home, "data/raw")
+dir_data_out <- file.path(dir_home, "data/processed")
 
 # Results directories
 dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
@@ -81,7 +82,7 @@ The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which
 Charlotte shared with me after her full QC.
 
 ``` {r 03_open_seurat}
-file_rds <- paste0(dir_data, "seu_spinal_allcelltypes_shortread_postQC.rds")
+file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
 seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
 seu
@@ -229,12 +230,10 @@ seu_astros <- subset(
 seu_astros
 ```
 
-Even though one could technically call this preprocessed, I will still store
-this subsetted astrocyte file in the folder `data/raw`; it's still a raw Seurat
-object without preprocessing, but  now it's just astrocytes.
+Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/preprocessed` rather than `data/raw`: I count the subsetting as preprocessing.
 
 ``` {r 14_save_to_disk}
-file_rds <- paste0(dir_data, "seu_spinal_astros_shortread_postQC.rds")
+file_rds <- file.path(dir_data_out, "seu_shortread_astros_raw.rds")
 saveRDS(seu_astros, file_rds)
 ```
 
