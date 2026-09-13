@@ -42,7 +42,7 @@ library(knitr)
 dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
 
 # Data directories
-dir_data <- file.path(dir_home, "data/raw")
+dir_data_in <- file.path(dir_home, "data/raw")
 dir_data_out <- file.path(dir_home, "data/processed")
 
 # Results directories
@@ -156,12 +156,13 @@ I want to show how many astrocytes each sample has. I will show both the absolut
 # non-astrocyte-cells of each participant
 metadata <- seu@meta.data |>
   as.data.frame()
-# Make a Boolean-like astrocyte-non-astrocyte column
+# Make a column which states whether something is an astrocyte or not
 metadata$astro <- ifelse(
   test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
   yes = "Astrocyte",
   no = "Non-Astrocyte"
 )
+# Calculate frequencies of astrocyte vs non-astrocyte
 freq_table <- table(
   metadata$astro,
   metadata$AnonymousID
@@ -169,20 +170,18 @@ freq_table <- table(
   as.data.frame()
 colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
 
-# The levels aren't ordered like I want: it's in the order ALS1, ALS10, ALS11,
-# ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. etc. It does not count up from
-# ALS1 to ALS 9 and then from 10 to 20, becuase ALS1 till ALS 9 is in single
-# digits... I tried to fix it with this ugly fix, but it did not work; I'll
-# leave it for now
+# Rearrange the columns so they are in a sensible order; as sample numbers are
+# given with single digits for single digit character, it's currently in the
+# order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
+# not count up like we humans would. 
 freq_table <- freq_table |>
   mutate(
     Sample = fct_relevel(
-      Sample,
-      "ALS1", "ALS2", "ALS3", "ALS4", "ALS5", "ALS6", "ALS7", "ALS8", "ALS9"
-    )
+      Sample, str_sort(unique(as.character(Sample)), numeric = TRUE)
+      )
   )
 
-# Inspect what this dataframe looks like
+# Show the top rows in the knitted file
 kable(head(freq_table))
 ```
 
