@@ -12,11 +12,7 @@ output:
 
 # Subsetting Astrocytes from All Celltype-Seurat
 
-This is the first script of this project. In this project, I analysed single-
-nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20
-ALS patients and 4 controls, focusing on astrocytes. In this script, I will open
-the full dataset (with all celltypes), examine the astrocytes (e.g. what 
-proportion of total cells they form per sample), and subset the astrocytes.
+This is the first script of this project. In this project, I analysed single-nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20 ALS patients and 4 controls, focusing on astrocytes. In this script, I will open the full dataset (with all celltypes), examine the astrocytes (e.g. what proportion of total cells they form per sample), and subset the astrocytes.
 
 ``` {r 01_setup, include = FALSE} 
 # Manage settings for code chunks throughout the document
@@ -52,8 +48,7 @@ dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the
-document. Users can adapt these if desired.
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
 ``` {r, 02_defining variables}
 astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
@@ -63,7 +58,7 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 
 ### save_plot()
 
-This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the ggplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
+This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the gplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
 ``` {r xx_helpers}
 # file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6) {
@@ -78,8 +73,7 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 
 ## Load Seurat in from disk
 
-The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which 
-Charlotte shared with me after her full QC.
+The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which Charlotte shared with me after her full QC.
 
 ``` {r 03_open_seurat}
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
@@ -90,10 +84,7 @@ seu
 
 ## Visualization annotation all celltypes
 
-Charlotte defined major cell types using a publicly available atlas of the human
-spinal cord of the Allan Brain Insitute. These are stored in the columns 
-`predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`,
-with the latter having a more subdivided annotation than the former.
+Charlotte defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
 ``` {r 04_umap_subclass}
 # I want to show both subclass and cellclass. First show subclass
@@ -130,12 +121,7 @@ save_plot(p_allen_group, "allcelltypes_umap_alangroup")
 
 ## Visualization astrocyte markers
 
-I previously provided the annotation of celltypes, but I would like to confirm
-that the labelled astrocytes are astrocytes. A FeaturePlot() with 
-astrocyte-marker genes forms a quick way to do so. In the default settings of 
-this document, I provided the astrocyte marker genes 
-`c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster
-expresses these markers.
+I previously provided the annotation of celltypes, but I would like to confirm that the labelled astrocytes are astrocytes. A FeaturePlot() with astrocyte-marker genes forms a quick way to do so. In the default settings of this document, I provided the astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster expresses these markers.
 
 ``` {r 07_featureplot}
 p_feature <- FeaturePlot(
@@ -153,8 +139,7 @@ save_plot(p_feature, "allcelltypes_featureplot")
 
 ## Visualization astrocyte frequency
 
-I want to show how many astrocytes each sample has. I will show both the
-absolute frequency and the relative frequency.
+I want to show how many astrocytes each sample has. I will show both the absolute frequency and the relative frequency.
 
 ``` {r 09_preprocessing_freq}
 # Create a dataframe which contains the count of astrocyte- and
@@ -215,11 +200,7 @@ save_plot(p_prop, "allcelltypes_barplot_prop")
 
 # Subset astrocytes and save on disk
 
-Now that we have inspected the astrocytes in the whole dataset, I can subset
-the astrocytes which I will continue in the rest of the project. I wil subset
-the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, 
-which was visualized in the first image under the header 
-**Visualization annotation all celltypes**.
+Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in the first image under the header **Visualization annotation all celltypes**.
 
 ``` {r 13_subset_astros}
 seu_astros <- subset(
@@ -239,9 +220,7 @@ saveRDS(seu_astros, file_rds)
 
 # Session info
 
-I used the conda environment `r_scrnaseq_core` to run this script. You can find
-major package versions in the file `/environments/r_scrnaseq_core.yml`, but for
-full reproducibility, I'll display all dependencies and package versions below.
+I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
 
 ``` {r 15_sessioninfo}
 sessionInfo()
