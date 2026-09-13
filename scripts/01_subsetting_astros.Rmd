@@ -1,7 +1,7 @@
 ---
 title: "Subsetting Astrocytes"
 author: "Niels Boersbroek"
-date: "2026-09-04"
+date: "`r Sys.Date()`"
 output: 
   html_document:
     toc: true
@@ -55,7 +55,7 @@ dir_data_out <- file.path(dir_home, "data/processed")
 
 # Results directories
 dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
-dir.create(dir_fig, recursive = TRUE)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
 ```
 
 ## Defining variables
@@ -85,8 +85,6 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 }
 ```
 
-</details>
-
 ### calc_freq()
 
 In the section **Visualization Astrocyte Frequency**, I'll make barplots with the frequencies of cell types per sample. I will create figures which show the frequency of all cell types, but also one which just shows *astrocytes vs non-astrocytes*. To do this efficiently, I created the function calc_freq which can calculate both.
@@ -100,7 +98,6 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   ) |>
     as.data.frame()
   colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
-  freq_table
   # Rearrange the columns so they are in a sensible order; as sample numbers are
   # given with single digits for single digit character, it's currently in the
   # order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
@@ -135,6 +132,8 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
 }
 ```
 
+</details>
+
 # Astrocytes in the dataset with all celltypes
 
 ## Load Seurat in from disk
@@ -157,7 +156,7 @@ seu
 p_allen_subclass <- DimPlot(
   seu,
   reduction = "umap",
-  group.by = "predicted.id_coarse_allen_Subclass",
+  group.by = "predicted.id_coarse_allen_subclass",
   label = TRUE,
   repel = TRUE
 ) +
@@ -216,8 +215,15 @@ This section uses the functions `calc_freq` and `bar_freq`, which I created myse
 I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
 
 ``` {r 13_preprocessing_freq}
-# Calculate frequencies of astrocyte vs non-astrocyte
-freq_table <- calc_freq(metadata, "predicted.id_coarse_allen_subclass", "AnonymousID")
+# Extract dataframe from seurat object
+metadata <- seu@meta.data |>
+  as.data.frame()
+# Calculate frequencies of celltypes
+freq_table <- calc_freq(
+  metadata,
+  "predicted.id_coarse_allen_subclass",
+  "AnonymousID"
+)
 
 # Show the top rows in the knitted file
 kable(head(freq_table))
@@ -229,8 +235,8 @@ p_abs
 ```
 
 ``` {r 15_proportional_freq}
-p_abs <- bar_freq(freq_table, "fill")
-p_abs
+p_prop <- bar_freq(freq_table, "fill")
+p_prop
 ```
 
 ```{r 16_save_plots, echo = FALSE}
@@ -243,10 +249,6 @@ save_plot(p_prop, "allcelltypes_barplot_prop")
 ### Frequency astrocyte vs non-astrocyte
 
 ``` {r 17_preprocessing_freq}
-# Create a dataframe which contains the count of astrocyte- and
-# non-astrocyte-cells of each participant
-metadata <- seu@meta.data |>
-  as.data.frame()
 # Make a column which states whether something is an astrocyte or not
 metadata$astro <- ifelse(
   test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
@@ -267,8 +269,8 @@ p_abs
 ```
 
 ``` {r 19_proportional_freq}
-p_abs <- bar_freq(freq_table, "fill", just_astro = TRUE)
-p_abs
+p_prop <- bar_freq(freq_table, "fill", just_astro = TRUE)
+p_prop
 ```
 
 ```{r 20_save_plots, echo = FALSE}
@@ -290,10 +292,10 @@ seu_astros <- subset(
 seu_astros
 ```
 
-Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/preprocessed` rather than `data/raw`: I count the subsetting as preprocessing.
+Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/processed` rather than `data/raw`: I count the subsetting as preprocessing.
 
 ``` {r 22_save_to_disk}
-file_rds <- file.path(dir_data_out, "seu_shortread_astros_raw.rds")
+file_rds <- file.path(dir_data_out, "seu_shortread_astros_subset.rds")
 saveRDS(seu_astros, file_rds)
 ```
 
