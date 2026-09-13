@@ -31,7 +31,6 @@ This script was run with the *conda environment* `r_scrnaseq_core`.
 
 ``` {r setwd_remote_rstudio}
 # setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
 ```
 
 ``` {r 02_packages_directories}
@@ -56,14 +55,14 @@ dir_data_out <- file.path(dir_home, "data/processed")
 
 # Results directories
 dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
-dir.create(dir_fig, recursive = TRUE, showWarnings = TRUE)
+dir.create(dir_fig, recursive = TRUE)
 ```
 
 ## Defining variables
 
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
-``` {r, 02_defining variables}
+``` {r, 03_defining variables}
 astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
@@ -76,7 +75,7 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ### save_plot()
 
 This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the gplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
-``` {r xx_helpers}
+``` {r 04_helper_save_plot}
 # file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6) {
   png_file <- file.path(dir_fig, paste0(filename, ".png"))
@@ -93,19 +92,19 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 In the section **Visualization Astrocyte Frequency**, I'll make barplots with the frequencies of cell types per sample. I will create figures which show the frequency of all cell types, but also one which just shows *astrocytes vs non-astrocytes*. To do this efficiently, I created the function calc_freq which can calculate both.
 
 
-``` {r xx_helper_calc_freq}
+``` {r 05_helper_calc_freq}
 calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   freq_table <- table(
-  metadata[, col_celltype],
-  metadata[, col_sample]
-) |>
-  as.data.frame()
+    metadata[, col_celltype],
+    metadata[, col_sample]
+  ) |>
+    as.data.frame()
   colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
   freq_table
   # Rearrange the columns so they are in a sensible order; as sample numbers are
   # given with single digits for single digit character, it's currently in the
   # order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
-  # not count up like we humans would. 
+  # not count up like we humans would.
   freq_table <- freq_table |>
     mutate(
       Sample = fct_relevel(
@@ -114,28 +113,26 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
     )
   freq_table
 }
-
 ```
 
 ### bar_freq()
 
 `bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument just_astro because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of calc_freq() as input.
 
-``` {r xx_helper_bar_freq}
-# The argument freq_type becomes the argument to position in geom_bar. 
+``` {r 06_helper_bar_freq}
+# The argument freq_type becomes the argument to position in geom_bar.
 # "stack" makes it absolute, "fill" makes it proportional.
 bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
   p_bar <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
-  geom_bar(position = freq_type, stat = "identity") +
-  theme(axis.text.x = element_text(angle = 90)) # otherwise unreadable x-axis
+    geom_bar(position = freq_type, stat = "identity") +
+    theme(axis.text.x = element_text(angle = 90)) # otherwise unreadable x-axis
 
   if (just_astro) {
     p_bar <- p_bar + scale_fill_manual(values = c("#EF2400", "grey"))
   }
-  
+
   p_bar
 }
-
 ```
 
 # Astrocytes in the dataset with all celltypes
@@ -144,7 +141,7 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
 
 The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which \[name\] shared with me after her full QC.
 
-``` {r 03_open_seurat}
+``` {r 07_open_seurat}
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
 seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
@@ -155,7 +152,7 @@ seu
 
 \[name\] defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
-``` {r 04_umap_subclass}
+``` {r 08_umap_subclass}
 # I want to show both subclass and cellclass. First show subclass
 p_allen_subclass <- DimPlot(
   seu,
@@ -169,7 +166,7 @@ p_allen_subclass <- DimPlot(
 p_allen_subclass
 ```
 
-``` {r 05_umap_cellclass}
+``` {r 09_umap_cellclass}
 p_allen_group <- DimPlot(
   seu,
   reduction = "umap",
@@ -182,7 +179,7 @@ p_allen_group <- DimPlot(
 p_allen_group
 ```
 
-```{r 06_save_plots, echo = FALSE}
+```{r 10_save_plots, echo = FALSE}
 # Store the plots, but keep this hidden for the output
 save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass")
 save_plot(p_allen_group, "allcelltypes_umap_alangroup")
@@ -192,7 +189,7 @@ save_plot(p_allen_group, "allcelltypes_umap_alangroup")
 
 I previously provided the annotation of celltypes, but I would like to confirm that the labelled astrocytes are astrocytes. A FeaturePlot() with astrocyte-marker genes forms a quick way to do so. In the default settings of this document, I provided the astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster expresses these markers.
 
-``` {r 07_featureplot}
+``` {r 11_featureplot}
 p_feature <- FeaturePlot(
   seu,
   features = astro_markers,
@@ -201,7 +198,7 @@ p_feature <- FeaturePlot(
 p_feature
 ```
 
-```{r 08_save_plots, echo = FALSE}
+```{r 12_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
 save_plot(p_feature, "allcelltypes_featureplot")
 ```
@@ -218,8 +215,7 @@ This section uses the functions `calc_freq` and `bar_freq`, which I created myse
 
 I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
 
-``` {r 09_preprocessing_freq}
-
+``` {r 13_preprocessing_freq}
 # Calculate frequencies of astrocyte vs non-astrocyte
 freq_table <- calc_freq(metadata, "predicted.id_coarse_allen_subclass", "AnonymousID")
 
@@ -227,17 +223,17 @@ freq_table <- calc_freq(metadata, "predicted.id_coarse_allen_subclass", "Anonymo
 kable(head(freq_table))
 ```
 
-``` {r 10_absolute_freq}
+``` {r 14_absolute_freq}
 p_abs <- bar_freq(freq_table, "stack")
 p_abs
 ```
 
-``` {r 11_proportional_freq}
+``` {r 15_proportional_freq}
 p_abs <- bar_freq(freq_table, "fill")
 p_abs
 ```
 
-```{r 12_save_plots, echo = FALSE}
+```{r 16_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs")
 save_plot(p_prop, "allcelltypes_barplot_prop")
@@ -246,7 +242,7 @@ save_plot(p_prop, "allcelltypes_barplot_prop")
 
 ### Frequency astrocyte vs non-astrocyte
 
-``` {r 09_preprocessing_freq}
+``` {r 17_preprocessing_freq}
 # Create a dataframe which contains the count of astrocyte- and
 # non-astrocyte-cells of each participant
 metadata <- seu@meta.data |>
@@ -265,17 +261,17 @@ freq_table <- calc_freq(metadata, "astro", "AnonymousID")
 kable(head(freq_table))
 ```
 
-``` {r 10_absolute_freq}
+``` {r 18_absolute_freq}
 p_abs <- bar_freq(freq_table, "stack", just_astro = TRUE)
 p_abs
 ```
 
-``` {r 11_proportional_freq}
+``` {r 19_proportional_freq}
 p_abs <- bar_freq(freq_table, "fill", just_astro = TRUE)
 p_abs
 ```
 
-```{r 12_save_plots, echo = FALSE}
+```{r 20_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs_just_astro")
 save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
@@ -285,7 +281,7 @@ save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
 
 Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in the first image under the header **Visualization annotation all celltypes**.
 
-``` {r 13_subset_astros}
+``` {r 21_subset_astros}
 seu_astros <- subset(
   seu,
   subset = predicted.id_coarse_allen_subclass == "Astrocytes"
@@ -296,7 +292,7 @@ seu_astros
 
 Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/preprocessed` rather than `data/raw`: I count the subsetting as preprocessing.
 
-``` {r 14_save_to_disk}
+``` {r 22_save_to_disk}
 file_rds <- file.path(dir_data_out, "seu_shortread_astros_raw.rds")
 saveRDS(seu_astros, file_rds)
 ```
@@ -305,6 +301,6 @@ saveRDS(seu_astros, file_rds)
 
 I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
 
-``` {r 15_sessioninfo}
+``` {r 23_sessioninfo}
 sessionInfo()
 ```
