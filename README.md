@@ -12,7 +12,9 @@ tree
 
 ## Running scripts
 
-Scripts assume the working directory is the project root (marked by the .here file): open the project in VS Code/RStudio from this root folder, or ensure your SLURM wrapper `cd`s here before rendering.
+Scripts locate the project root automatically via the here package (marked by the .here file at the repository root). This resolves automatically when rendering .Rmd/.qmd files via rmarkdown::render() or Quarto's CLI. If running chunks interactively (e.g. in RStudio or VS Code), ensure your R session's working directory is set to somewhere within this project's folder tree first.
+
+One can only run it if the full dataset is stored in the `/data/raw` folder.
 
 ## Environments
 
