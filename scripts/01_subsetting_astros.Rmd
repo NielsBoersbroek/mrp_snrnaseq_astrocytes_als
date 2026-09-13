@@ -27,19 +27,28 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
 
+**This code chunk is also necessary when using the remote RStudio server of the HPC, you can remove it once you're done with that:**
+
+``` {r setwd_remote_rstudio}
+# setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+
+```
+
 ``` {r 02_packages_directories}
 ##  Open packages --------------------------------------------------------------
 
 library(Seurat)
 library(tidyverse)
+library(here)
 library(knitr)
 
 
 ##  Set directories ------------------------------------------------------------
 
 
-# Now forms a hardcoded 'bug' - I will fix this later, using the here package
-dir_home <- "/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC"
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
 
 # Data directories
 dir_data_in <- file.path(dir_home, "data/raw")
