@@ -79,6 +79,56 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 
 </details>
 
+### calc_freq()
+
+In the section **Visualization Astrocyte Frequency**, I'll make barplots with the frequencies of cell types per sample. I will create figures which show the frequency of all cell types, but also one which just shows *astrocytes vs non-astrocytes*. To do this efficiently, I created the function calc_freq which can calculate both.
+
+
+``` {r xx_helper_calc_freq}
+calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
+  freq_table <- table(
+  metadata[, col_celltype],
+  metadata[, col_sample]
+) |>
+  as.data.frame()
+  colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
+  freq_table
+  # Rearrange the columns so they are in a sensible order; as sample numbers are
+  # given with single digits for single digit character, it's currently in the
+  # order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
+  # not count up like we humans would. 
+  freq_table <- freq_table |>
+    mutate(
+      Sample = fct_relevel(
+        Sample, str_sort(unique(as.character(Sample)), numeric = TRUE)
+      )
+    )
+  freq_table
+}
+
+```
+
+### bar_freq()
+
+`bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument just_astro because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of calc_freq() as input.
+
+``` {r xx_helper_bar_freq}
+# The argument freq_type becomes the argument to position in geom_bar. 
+# "stack" makes it absolute, "fill" makes it proportional.
+bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
+  p_bar <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
+  geom_bar(position = freq_type, stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90)) # otherwise unreadable x-axis
+
+  if (just_astro) {
+    p_bar <- p_bar + scale_fill_manual(values = c("#EF2400", "grey"))
+  }
+  
+  p_bar
+}
+
+```
+
 # Astrocytes in the dataset with all celltypes
 
 ## Load Seurat in from disk
@@ -149,7 +199,43 @@ save_plot(p_feature, "allcelltypes_featureplot")
 
 ## Visualization astrocyte frequency
 
-I want to show how many astrocytes each sample has. I will show both the absolute frequency and the relative frequency.
+I want to show how many astrocytes each sample has. I will create multiple types of barplots.
+- visualizations of proportional frequency and visualizations with relative frequency (as scRNAseq data is proportional)
+- visualizations with the frequency of all celltypes vs visualizations with just astrocytes vs non-astrocytes
+
+This section uses the functions `calc_freq` and `bar_freq`, which I created myself in the section **Helper functions**.
+
+### Frequency of all cell types
+
+I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
+
+``` {r 09_preprocessing_freq}
+
+# Calculate frequencies of astrocyte vs non-astrocyte
+freq_table <- calc_freq(metadata, "predicted.id_coarse_allen_subclass", "AnonymousID")
+
+# Show the top rows in the knitted file
+kable(head(freq_table))
+```
+
+``` {r 10_absolute_freq}
+p_abs <- bar_freq(freq_table, "stack")
+p_abs
+```
+
+``` {r 11_proportional_freq}
+p_abs <- bar_freq(freq_table, "fill")
+p_abs
+```
+
+```{r 12_save_plots, echo = FALSE}
+# Store the plot, but keep this hidden for the output
+save_plot(p_abs, "allcelltypes_barplot_abs")
+save_plot(p_prop, "allcelltypes_barplot_prop")
+```
+
+
+### Frequency astrocyte vs non-astrocyte
 
 ``` {r 09_preprocessing_freq}
 # Create a dataframe which contains the count of astrocyte- and
@@ -162,49 +248,28 @@ metadata$astro <- ifelse(
   yes = "Astrocyte",
   no = "Non-Astrocyte"
 )
-# Calculate frequencies of astrocyte vs non-astrocyte
-freq_table <- table(
-  metadata$astro,
-  metadata$AnonymousID
-) |>
-  as.data.frame()
-colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
 
-# Rearrange the columns so they are in a sensible order; as sample numbers are
-# given with single digits for single digit character, it's currently in the
-# order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
-# not count up like we humans would. 
-freq_table <- freq_table |>
-  mutate(
-    Sample = fct_relevel(
-      Sample, str_sort(unique(as.character(Sample)), numeric = TRUE)
-      )
-  )
+# Calculate frequencies of astrocyte vs non-astrocyte per sample
+freq_table <- calc_freq(metadata, "astro", "AnonymousID")
 
 # Show the top rows in the knitted file
 kable(head(freq_table))
 ```
 
 ``` {r 10_absolute_freq}
-p_abs <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
-  geom_bar(position = "stack", stat = "identity") +
-  scale_fill_manual(values = c("#EF2400", "grey")) +
-  theme(axis.text.x = element_text(angle = 90)) # otherwise unreadable x-axis
+p_abs <- bar_freq(freq_table, "stack", just_astro = TRUE)
 p_abs
 ```
 
 ``` {r 11_proportional_freq}
-p_prop <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
-  geom_bar(position = "fill", stat = "identity") +
-  scale_fill_manual(values = c("#EF2400", "grey")) + # red-grey = easy to read
-  theme(axis.text.x = element_text(angle = 90))
-p_prop
+p_abs <- bar_freq(freq_table, "fill", just_astro = TRUE)
+p_abs
 ```
 
 ```{r 12_save_plots, echo = FALSE}
 # Store the plot, but keep this hidden for the output
-save_plot(p_abs, "allcelltypes_barplot_abs")
-save_plot(p_prop, "allcelltypes_barplot_prop")
+save_plot(p_abs, "allcelltypes_barplot_abs_just_astro")
+save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
 ```
 
 # Subset astrocytes and save on disk
