@@ -60,6 +60,10 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 
 ## Helper functions
 
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
 ### save_plot()
 
 This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the gplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
@@ -72,6 +76,8 @@ save_plot <- function(p, filename, width = 10, height = 6) {
   ggsave(pdf_file, p, width = width, height = height, dpi = 150)
 }
 ```
+
+</details>
 
 # Astrocytes in the dataset with all celltypes
 
