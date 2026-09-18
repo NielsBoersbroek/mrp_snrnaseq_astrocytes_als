@@ -10,9 +10,7 @@ output:
 
 ---
 
-## Note to self
-
-This note will be removed later, but I now replaced names of individuals with \[name\], to anonymise it in case I share this document with a LLM. Change this in the final version.
+<!-- Note to self: I now replaced names of individuals with \[name\], to anonymise it in case I share this document with a LLM. Change this in the final version and remove this note. -->
 
 # Subsetting Astrocytes from All Celltype-Seurat
 
@@ -23,14 +21,16 @@ This is the first script of this project. In this project, I analysed single-nuc
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-# Prerequisites
+# Preparation
+
+## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
 
-**This code chunk is also necessary when using the remote RStudio server of the HPC, you can remove it once you're done with that:**
-
-``` {r setwd_remote_rstudio}
-# setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+``` {r setwd_remote_rstudio, include = FALSE, eval = FALSE}
+# This code chunk is  necessary when using the remote RStudio server of the HPC
+# You can remove it once you're done with testing
+setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
 ```
 
 ``` {r 02_packages_directories}
@@ -49,13 +49,19 @@ library(knitr)
 # directory when loading library(here)
 dir_home <- here::here()
 
-# Data directories
+## Data directories
 dir_data_in <- file.path(dir_home, "data/raw")
 dir_data_out <- file.path(dir_home, "data/processed")
 
-# Results directories
-dir_fig <- file.path(dir_home, "results/figures/01_subsetting_astros")
+## Results directories
+# Create subfolders with the name of this script, so all figures of this script
+# are in the same place
+folder_name <- knitr::current_input(dir = FALSE)
+folder_name <- str_remove(folder_name, "\\.\\w*$")
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
 dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 ```
 
 ## Defining variables
