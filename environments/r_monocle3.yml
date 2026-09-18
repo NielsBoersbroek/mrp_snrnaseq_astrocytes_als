@@ -8,6 +8,7 @@ dependencies:
 - r-tidyverse=2
 - r-monocle3=1.4.26
 - r-rmarkdown
+- quarto
 - r-languageserver # to use R language service on VS Code
 - r-devtools # For installing r-seuratwrappers
 - bioconductor-tradeseq
