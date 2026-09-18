@@ -2,12 +2,9 @@
 title: "Subsetting Astrocytes"
 author: "Niels Boersbroek"
 date: "`r Sys.Date()`"
-output: 
-  html_document:
+format: 
+  html:
     toc: true
-    toc_float: true
-    theme: united
-
 ---
 
 <!-- Note to self: I now replaced names of individuals with \[name\], to anonymise it in case I share this document with a LLM. Change this in the final version and remove this note. -->
@@ -16,7 +13,9 @@ output:
 
 This is the first script of this project. In this project, I analysed single-nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20 ALS patients and 4 controls, focusing on astrocytes. In this script, I will open the full dataset (with all celltypes), examine the astrocytes (e.g. what proportion of total cells they form per sample), and subset the astrocytes.
 
-``` {r 01_setup, include = FALSE} 
+```{r}
+#| label: chunk-01-setup
+#| include: false
 # Manage settings for code chunks throughout the document
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
@@ -27,13 +26,17 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
 
-``` {r setwd_remote_rstudio, include = FALSE, eval = FALSE}
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
 # This code chunk is  necessary when using the remote RStudio server of the HPC
 # You can remove it once you're done with testing
 setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
 ```
 
-``` {r 02_packages_directories}
+```{r}
+#| label: chunk-02-packages-directories
 ##  Open packages --------------------------------------------------------------
 
 library(Seurat)
@@ -68,7 +71,8 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
-``` {r, 03_defining variables}
+```{r}
+#| label: chunk-03-defining-variables
 astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
@@ -81,7 +85,8 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ### save_plot()
 
 This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the gplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
-``` {r 04_helper_save_plot}
+```{r}
+#| label: chunk-04-helper-save-plot
 # file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6) {
   png_file <- file.path(dir_fig, paste0(filename, ".png"))
@@ -96,7 +101,8 @@ save_plot <- function(p, filename, width = 10, height = 6) {
 In the section **Visualization Astrocyte Frequency**, I'll make barplots with the frequencies of cell types per sample. I will create figures which show the frequency of all cell types, but also one which just shows *astrocytes vs non-astrocytes*. To do this efficiently, I created the function calc_freq which can calculate both.
 
 
-``` {r 05_helper_calc_freq}
+```{r}
+#| label: chunk-05-helper-calc-freq
 calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   freq_table <- table(
     metadata[, col_celltype],
@@ -122,7 +128,8 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
 
 `bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument just_astro because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of calc_freq() as input.
 
-``` {r 06_helper_bar_freq}
+```{r}
+#| label: chunk-06-helper-bar-freq
 # The argument freq_type becomes the argument to position in geom_bar.
 # "stack" makes it absolute, "fill" makes it proportional.
 bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
@@ -146,7 +153,8 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
 
 The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which \[name\] shared with me after her full QC.
 
-``` {r 07_open_seurat}
+```{r}
+#| label: chunk-07-open-seurat
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
 seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
@@ -157,7 +165,9 @@ seu
 
 \[name\] defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
-``` {r 08_umap_subclass}
+```{r}
+#| label: fig-08-umap-subclass
+#| fig-cap: "UMAP of all cell types, coloured by Allen subclass annotation"
 # I want to show both subclass and cellclass. First show subclass
 p_allen_subclass <- DimPlot(
   seu,
@@ -171,7 +181,8 @@ p_allen_subclass <- DimPlot(
 p_allen_subclass
 ```
 
-``` {r 09_umap_cellclass}
+```{r}
+#| label: chunk-09-umap-cellclass
 p_allen_group <- DimPlot(
   seu,
   reduction = "umap",
@@ -184,17 +195,21 @@ p_allen_group <- DimPlot(
 p_allen_group
 ```
 
-```{r 10_save_plots, echo = FALSE}
+```{r}
+#| label: chunk-10-save-plots
+#| echo: false
 # Store the plots, but keep this hidden for the output
 save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass")
 save_plot(p_allen_group, "allcelltypes_umap_alangroup")
 ```
 
+
 ## Visualization astrocyte markers
 
 I previously provided the annotation of celltypes, but I would like to confirm that the labelled astrocytes are astrocytes. A FeaturePlot() with astrocyte-marker genes forms a quick way to do so. In the default settings of this document, I provided the astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster expresses these markers.
 
-``` {r 11_featureplot}
+```{r}
+#| label: chunk-11-featureplot
 p_feature <- FeaturePlot(
   seu,
   features = astro_markers,
@@ -203,7 +218,9 @@ p_feature <- FeaturePlot(
 p_feature
 ```
 
-```{r 12_save_plots, echo = FALSE}
+```{r}
+#| label: chunk-12-save-plots
+#| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_feature, "allcelltypes_featureplot")
 ```
@@ -220,7 +237,8 @@ This section uses the functions `calc_freq` and `bar_freq`, which I created myse
 
 I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
 
-``` {r 13_preprocessing_freq}
+```{r}
+#| label: chunk-13-preprocessing-freq
 # Extract dataframe from seurat object
 metadata <- seu@meta.data |>
   as.data.frame()
@@ -235,17 +253,21 @@ freq_table <- calc_freq(
 kable(head(freq_table))
 ```
 
-``` {r 14_absolute_freq}
+```{r}
+#| label: chunk-14-absolute-freq
 p_abs <- bar_freq(freq_table, "stack")
 p_abs
 ```
 
-``` {r 15_proportional_freq}
+```{r}
+#| label: chunk-15-proportional-freq
 p_prop <- bar_freq(freq_table, "fill")
 p_prop
 ```
 
-```{r 16_save_plots, echo = FALSE}
+```{r}
+#| label: chunk-16-save-plots
+#| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs")
 save_plot(p_prop, "allcelltypes_barplot_prop")
@@ -254,7 +276,8 @@ save_plot(p_prop, "allcelltypes_barplot_prop")
 
 ### Frequency astrocyte vs non-astrocyte
 
-``` {r 17_preprocessing_freq}
+```{r}
+#| label: chunk-17-preprocessing-freq
 # Make a column which states whether something is an astrocyte or not
 metadata$astro <- ifelse(
   test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
@@ -269,17 +292,21 @@ freq_table <- calc_freq(metadata, "astro", "AnonymousID")
 kable(head(freq_table))
 ```
 
-``` {r 18_absolute_freq}
+```{r}
+#| label: chunk-18-absolute-freq
 p_abs <- bar_freq(freq_table, "stack", just_astro = TRUE)
 p_abs
 ```
 
-``` {r 19_proportional_freq}
+```{r}
+#| label: chunk-19-proportional-freq
 p_prop <- bar_freq(freq_table, "fill", just_astro = TRUE)
 p_prop
 ```
 
-```{r 20_save_plots, echo = FALSE}
+```{r}
+#| label: chunk-20-save-plots
+#| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs_just_astro")
 save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
@@ -287,9 +314,10 @@ save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
 
 # Subset astrocytes and save on disk
 
-Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in the first image under the header **Visualization annotation all celltypes**.
+Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in @fig-08-umap-subclass.
 
-``` {r 21_subset_astros}
+```{r}
+#| label: chunk-21-subset-astros
 seu_astros <- subset(
   seu,
   subset = predicted.id_coarse_allen_subclass == "Astrocytes"
@@ -300,7 +328,8 @@ seu_astros
 
 Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/processed` rather than `data/raw`: I count the subsetting as preprocessing.
 
-``` {r 22_save_to_disk}
+```{r}
+#| label: chunk-22-save-to-disk
 file_rds <- file.path(dir_data_out, "seu_shortread_astros_subset.rds")
 saveRDS(seu_astros, file_rds)
 ```
@@ -309,6 +338,7 @@ saveRDS(seu_astros, file_rds)
 
 I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
 
-``` {r 23_sessioninfo}
+```{r}
+#| label: chunk-23-sessioninfo
 sessionInfo()
 ```
