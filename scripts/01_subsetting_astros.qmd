@@ -5,6 +5,8 @@ date: "`r Sys.Date()`"
 format: 
   html:
     toc: true
+    theme: journal
+    embed-resources: true
 ---
 
 <!-- Note to self: I now replaced names of individuals with \[name\], to anonymise it in case I share this document with a LLM. Change this in the final version and remove this note. -->
