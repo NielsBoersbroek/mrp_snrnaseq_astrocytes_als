@@ -1,11 +1,11 @@
 ---
 title: "Subsetting Astrocytes"
 author: "Niels Boersbroek"
-date: "`r Sys.Date()`"
+date: "September 21, 2026"
 format: 
   html:
     toc: true
-    theme: journal
+    theme: materia
     embed-resources: true
 ---
 
@@ -35,6 +35,10 @@ This script was run with the *conda environment* `r_scrnaseq_core`.
 # This code chunk is  necessary when using the remote RStudio server of the HPC
 # You can remove it once you're done with testing
 setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
+# The function knitr::current_input also does not work in the RStudio Remote
+# server, as nothing is knitted. Thus, run:
+folder_name <- "01_subsetting_astros.qmd"
+# and comment out the line folder_name <- knitr::current_input(dir = FALSE)
 ```
 
 ```{r}
@@ -67,6 +71,12 @@ dir_fig <- file.path(dir_home, "results/figures", folder_name)
 dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
 dir_tab <- file.path(dir_home, "results/tables", folder_name)
 dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+
 ```
 
 ## Defining variables
@@ -86,16 +96,49 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 
 ### save_plot()
 
-This document will display all images I make. However, I also want to save these images on disk - both as a .pdf file and .png file. This function saves both; I only need to provide the gplot-object, the name for the file (without filetype extension!) and optionally the width and heigth of the figure. 
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
+
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+
+A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
+
 ```{r}
 #| label: chunk-04-helper-save-plot
 # file.path provides the path, but I need to use paste0 to concatenate .png
-save_plot <- function(p, filename, width = 10, height = 6) {
-  png_file <- file.path(dir_fig, paste0(filename, ".png"))
-  ggsave(png_file, p, width = width, height = height, dpi = 150)
-  pdf_file <- file.path(dir_fig, paste0(filename, ".pdf"))
-  ggsave(pdf_file, p, width = width, height = height, dpi = 150)
+save_plot <- function(p, filename, width = 10, height = 6, 
+                      figure = NULL, grob = TRUE) {
+  ## Save image on disk as png and pdf
+  file_png <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(file_png, p, width = width, height = height, dpi = 150)
+  file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p, width = width, height = height, dpi = 150)
+  
+  ## Save the ggplot object on disk as an rds file 
+  if (!is.null(figure)) {
+    file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+    # Convert the object to a grob if needed
+    if (grob) {
+      p <- ggplotGrob(p)
+    }
+    # Save on disk
+    saveRDS(p, file_rds)
+  }
 }
+```
+
+### theme_manual()
+
+I created my own manual theme to be used for all figures.
+
+```{r}
+#| label: chunk-04-helper-save-plot
+theme_manual <- function() {
+  theme_classic(base_size = 12) +
+    theme(
+      # Still need to choose what I want here
+    )
+}
+
 ```
 
 ### calc_freq()
@@ -201,8 +244,8 @@ p_allen_group
 #| label: chunk-10-save-plots
 #| echo: false
 # Store the plots, but keep this hidden for the output
-save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass")
-save_plot(p_allen_group, "allcelltypes_umap_alangroup")
+save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass", grob = TRUE, figure = "SF1A")
+save_plot(p_allen_group, "allcelltypes_umap_alangroup", grob = TRUE, figure = "SF1B")
 ```
 
 
