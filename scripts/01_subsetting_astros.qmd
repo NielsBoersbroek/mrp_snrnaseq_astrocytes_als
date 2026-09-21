@@ -1,5 +1,5 @@
 ---
-title: "Subsetting Astrocytes"
+title: "01: Subsetting Astrocytes"
 author: "Niels Boersbroek"
 date: "September 21, 2026"
 format: 
@@ -227,7 +227,7 @@ p_allen_subclass
 ```
 
 ```{r}
-#| label: chunk-09-umap-cellclass
+#| label: fig-09-umap-cellclass
 p_allen_group <- DimPlot(
   seu,
   reduction = "umap",
@@ -254,7 +254,7 @@ save_plot(p_allen_group, "allcelltypes_umap_alangroup", grob = TRUE, figure = "S
 I previously provided the annotation of celltypes, but I would like to confirm that the labelled astrocytes are astrocytes. A FeaturePlot() with astrocyte-marker genes forms a quick way to do so. In the default settings of this document, I provided the astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster expresses these markers.
 
 ```{r}
-#| label: chunk-11-featureplot
+#| label: fig-11-featureplot
 p_feature <- FeaturePlot(
   seu,
   features = astro_markers,
@@ -299,13 +299,13 @@ kable(head(freq_table))
 ```
 
 ```{r}
-#| label: chunk-14-absolute-freq
+#| label: fig-14-absolute-freq
 p_abs <- bar_freq(freq_table, "stack")
 p_abs
 ```
 
 ```{r}
-#| label: chunk-15-proportional-freq
+#| label: fig-15-proportional-freq
 p_prop <- bar_freq(freq_table, "fill")
 p_prop
 ```
@@ -338,13 +338,13 @@ kable(head(freq_table))
 ```
 
 ```{r}
-#| label: chunk-18-absolute-freq
+#| label: fig-18-absolute-freq
 p_abs <- bar_freq(freq_table, "stack", just_astro = TRUE)
 p_abs
 ```
 
 ```{r}
-#| label: chunk-19-proportional-freq
+#| label: fig-19-proportional-freq
 p_prop <- bar_freq(freq_table, "fill", just_astro = TRUE)
 p_prop
 ```
