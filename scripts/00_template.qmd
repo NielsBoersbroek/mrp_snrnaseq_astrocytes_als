@@ -158,14 +158,17 @@ save_plot <- function(p, filename, width = 10, height = 6,
 }
 ```
 
-### theme_manual() and theme_quarto()
+### theme_quarto() and theme_manuscript()
 
-I created my own manual themes to be used for all figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manual()` is used to add themes to figures as they will end up in the manuscript.
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manual()` is used to add themes to figures as they will end up in the manuscript.
 
 ```{r}
 #| label: chunk-05-helper-themes
 theme_quarto <- function() {
-  theme_classic(plot.title = element_blank())
+  theme_classic() +
+    theme(
+      plot.title = element_blank()
+    )
 }
 
 theme_manuscript <- function(base_size = 8, legend_position = "none",
@@ -175,7 +178,11 @@ theme_manuscript <- function(base_size = 8, legend_position = "none",
       plot.title = element_blank(),
       legend.position = legend_position,
       axis.text = element_text(size = axis_text_size),
-      plot.tag = element_text(face = "bold", size = 14, hjust = 0, vjust = 0)
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        )
     )
 }
 
@@ -196,6 +203,12 @@ Remember to move the closing </details> tag below, to after your last helper fun
 ```{r}
 #| label: chunk-06-todo
 # [analysis-specific code here]
+```
+
+```{r}
+#| label: fig-01-description
+#| fig-cap: "Caption figure"
+# [Figure  here. Count seperately for figure chunks and non-figure chunks]
 ```
 
 # Session info
