@@ -1,7 +1,7 @@
 ---
 title: "[Title of analysis]"
 author: "Niels Boersbroek"
-date: "[Month] [Day], [Year]"
+date: "[Month] [Day], 2026"
 format: 
   html:
     toc: true
@@ -32,9 +32,46 @@ This script was run with the *conda environment* `[env_name]`.
 #| label: chunk-extra-setwd-remote-rstudio
 #| include: false
 #| eval: false
-# This code chunk is necessary when using the remote RStudio server of the HPC.
-# You can remove it once you're done with testing.
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of the one below this.
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
 setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
+
+##  Open packages --------------------------------------------------------------
+
+library(tidyverse)
+library(here)
+library(knitr)
+# [Add any additional, script-specific packages here]
+
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directories
+dir_data_in <- file.path(dir_home, "data/raw")
+dir_data_out <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "00_folder_name"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+
 ```
 
 ```{r}
@@ -147,7 +184,7 @@ Remember to move the closing </details> tag below, to after your last helper fun
 [Narrative text explaining what this step does and why.]
 
 ```{r}
-#| label: chunk-05-todo
+#| label: chunk-06-todo
 # [analysis-specific code here]
 ```
 
