@@ -20,10 +20,12 @@
 # either, but I would also like to keep them as empty folders.
 /results/figures/*
 !/results/figures/.gitkeep
+!/results/figures/manuscript/.gitkeep
 /results/tables/*
 !/results/tables/.gitkeep
 /results/reports/*
 !/results/reports/.gitkeep
+
 
 
 ## Ignore other files ---------------------------------------------------
