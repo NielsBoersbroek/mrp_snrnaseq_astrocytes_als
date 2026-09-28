@@ -40,15 +40,16 @@ This script was run with the *conda environment* `[env_name]`.
 # Moreover, I use knitr::current_input(), but that does not work as an
 # interactive session on the RStudio server does not involve any knitting
 
-setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
 
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- getwd()
 
 ## Data directories
-dir_data_in <- file.path(dir_home, "data/raw")
-dir_data_out <- file.path(dir_home, "data/processed")
+dir_data <- file.path(dir_home, "data/processed")
+# I'll need the table of sex genes, so create a path to data/metainformation
+dir_data_meta <- file.path(dir_home, "data/metainformation")
 
 ## Results directories
 # Create subfolders with the name of this script, so all figures/tables of
@@ -69,9 +70,11 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 #| label: chunk-02-packages
 
 library(tidyverse)
+library(Seurat)
+library(harmony)
+
 library(here)
 library(knitr)
-# [Add any additional, script-specific packages here]
 
 ```
 
@@ -84,8 +87,9 @@ library(knitr)
 dir_home <- here::here()
 
 ## Data directories
-dir_data_in <- file.path(dir_home, "data/raw")
-dir_data_out <- file.path(dir_home, "data/processed")
+dir_data <- file.path(dir_home, "data/processed")
+# I'll need the table of sex genes, so create a path to data/metainformation
+dir_data_meta <- file.path(dir_home, "data/metainformation")
 
 ## Results directories
 # Create subfolders with the name of this script, so all figures/tables of
@@ -109,7 +113,18 @@ This code block defines variables to be used throughout the rest of the document
 
 ```{r}
 #| label: chunk-04-defining-variables
-# [define script-specific variables here]
+# Set the dims using for RunUMAP() and FindNeighbors()
+# I set it high, as I'd like to include information and 40 did not highly
+# affect UMAP or clustering
+dims <- 40
+# k for K-Nearest Neighbors in FindNeighbors
+k <- 20 # Is default
+
+# Use a for loop to cluster at multiple resolutions
+resolutions <- c(
+  0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4,
+  0.45, 0.5, 0.6, 0.8, 1.0
+)
 ```
 
 ## Helper functions
@@ -182,27 +197,191 @@ theme_manuscript <- function(base_size = 8, legend_position = "none",
 
 ```
 
+### variable_feature_selection()
+
+I want to remove sex chromosome genes and mitochondrial genes in the FindVariableFeatures step. This does not remove these genes from all further analysis, but it just prevents these genes from affecting dimensionality reduction and subsequent clustering. As this involves quite a lot of steps, I decided to write a function, instead of running all these lines in a chunk below.
+
+You need to provide the Seurat object and a vector with the sex chromosome genes of your particular seurat object.
+
+```{r}
+#| label: chunk-07-helper-variable_feature_selection
+variable_feature_selection <- function(seu, sexgenes) {
+  # Create a vector of all genes
+  genes <- rownames(seu@assays$RNA$counts)
+  
+  # Create a vector of mitochondrial genes
+  mitogenes <- genes[grep("^MT-", genes)]
+  
+  # Create a new Seurat object with mitochondrial and sex chromosome genes removed
+  genes_to_remove <- c(mitogenes, sexgenes)
+  genes_boolean <- (genes %in% genes_to_remove)
+  gene_selection_counts <- seu@assays$RNA$counts[!genes_boolean, ]
+  gene_selection_seu_obj <- CreateSeuratObject(counts = gene_selection_counts)
+  gene_selection_seu_obj <- NormalizeData(gene_selection_seu_obj)
+  
+  # Run variable feature selection on the gene-selected Seurat object
+  gene_selection_seu_obj <- FindVariableFeatures(
+    gene_selection_seu_obj,
+    selection.method = "vst",
+    nfeatures = 2000
+  )
+  # Create a vector of the variable features of the gene-selected Seurat object
+  variable_features <- VariableFeatures(gene_selection_seu_obj)
+  # Transfer the Variable features from gene_removal_seu_obj to snrna_astros
+  VariableFeatures(seu) <- variable_features
+  
+  # Remove the objects which are no longer needed to save memory
+  rm(gene_selection_counts)
+  rm(gene_selection_seu_obj)
+  
+  # Return the seurat object with variable features set
+  seu
+}
+```
+
 <!-- [Add any additional, script-specific helper functions here as their own
 ### function_name() subsection, following the same pattern as save_plot() above.
 Remember to move the closing </details> tag below, to after your last helper function.] -->
 
 </details>
 
-# [Analysis section 1: name it after what this part of the script actually does]
+# Processing
 
-## [Subsection as needed]
+## Open Seurat and filter
 
-[Narrative text explaining what this step does and why.]
+There are some outliers, but there do not seem to be major disturbances in these parameters. As the QC done by \[name\] already contained a lot of filtering and elaborate doublet removal, we can be quite loose with filtering here. Thus, no further filtering will be done.
 
 ```{r}
-#| label: chunk-07-todo
-# [analysis-specific code here]
+#| label: chunk-07-open-seurat
+file_rds <- file.path(dir_data, "seu_shortread_astros_subset.rds")
+seu <- readRDS(file_rds)
+# Test whether it loaded in correctly
+seu
+```
+
+Some ugliness in the metadata, I'm fixing it here, in the root.
+- In the column pTDP-43 stage, all controls and samples ALS17 and ALS18 are empty. For the controls, that's because they do not have ALS and no pTDP-43 pathology, but samples ALS17 and ALS 18 are empty because they have FUS ALS - which has a different pathology.
+- Only one sample has pTDP-43 stage 2, so I lumped it together with 3 - otherwise comparison with stage 2 always looks weird, because it has n = 1.
+- The controls have empty strings in the column `primary_site_of_onset`, set these to `"Ctrl"`
+
+```{r}
+#| label: chunk-xx-metadata-fix
+
+metadata <- seu@meta.data
+
+# How to fix the metadata of pTDP-43 stage:
+metadata <- metadata |>
+  mutate(
+    pTDP.43.Stage = case_when(
+      AnonymousID %in% c("ALS17", "ALS18") ~ "FUS ALS",
+      str_detect(AnonymousID, "Ctrl") == TRUE ~ "Ctrl",
+      .default = as.character(pTDP.43.Stage)
+    ),
+    # The Ctrls have "" at primary_site_of_onset. Make this "Ctrl"
+    primary_site_of_onset = ifelse(
+      str_detect(AnonymousID, "Ctrl") == TRUE,
+      "Ctrl",
+      primary_site_of_onset
+    ),
+    pTDP43_lumped = case_when(
+      pTDP.43.Stage %in% c("2", "3") ~ "2 & 3",
+      .default = as.character(pTDP.43.Stage)
+    ),
+    # This relevel steps makes the visualizations make more sense
+    pTDP43_lumped = fct_relevel(pTDP43_lumped, "Ctrl", "FUS ALS")
+  )
+
+seu@meta.data <- metadata
+```
+
+## Visualize some QC metrics
+
+```{r}
+#| label: fig-01-qc-vln
+#| fig-cap: "Violinplots of number of reads, number of expressed genes and percentage mitochondrial RNA for astrocytes"
+Idents(seu) <- "predicted.id_coarse_allen_subclass"
+VlnPlot(
+  seu,
+  features = c("nCount_RNA", "nFeature_RNA", "percent.mt"),
+  ncol = 3,
+  pt.size = 0
+)
 ```
 
 ```{r}
-#| label: fig-01-description
-#| fig-cap: "Caption figure"
-# [Figure  here. Count seperately for figure chunks and non-figure chunks]
+#| label: fig-02-qc-featurescatter
+#| fig-cap: "Featurescatter plot, showing the relationship between number of features and number of genes (nFeatureRNA ~ nCount_RNA)"
+FeatureScatter(
+  seu,
+  feature1 = "nCount_RNA",
+  feature2 = "nFeature_RNA"
+)
+```
+Print summary statistics
+
+```{r}
+#| label: chunk-08-qc-summary-statistics
+summary(seu@meta.data$nCount_RNA)
+summary(seu@meta.data$nFeature_RNA)
+summary(seu@meta.data$percent.mt)
+```
+
+## Standard Seurat processing (Normalize, Variable Features, PCA, UMAP, etc.)
+
+I wanted to remove sex chromosome genes and mitochondrial genes in the FindVariableFeatures step and created the helper function variable_feature_selection() to do so. The vector `sexgenes` should be specific for the genes which are and which are not in your Seurat object, so when I wanted to do this, \[name\] shared a text file with me. In hindsight, this was not the most reproducible or neat approach, but it is what I did all those months ago, so I'll use it now as well. For transparancy, this sex_gene.txt file is also in the Git repo under `/data/metainformation/sex_genes.txt`.
+
+```{r}
+#| label: chunk-xx-processing
+seu <- NormalizeData(seu)
+
+## Variable features -----------------------------------------------------------
+
+# sex_genes.txt stores a list of sex genes in my seurat object 
+file_txt <- file.path(dir_data_meta, "sex_genes.txt")
+sexgenes <- read_table(file_txt, col_names = FALSE) |> pull(X1)
+
+seu <- variable_feature_selection(seu, sexgenes)
+
+## Further processing ----------------------------------------------------------
+
+seu <- ScaleData(seu, vars.to.regress = "percent.mt")
+seu <- RunPCA(seu) # Runs on variable features by default
+seu <- RunHarmony(seu, group.by.vars = "AnonymousID")
+seu <- RunUMAP(seu, reduction = "harmony", dims = 1:dims)
+seu <- FindNeighbors(seu, reduction = "harmony", k.param = k, dims = 1:dims)
+```
+
+```{r}
+#| label: chunk-xx-clustering
+reductions <- c("pca", "umap")
+
+for (res in resolutions) {
+  seu <- FindClusters(
+    seu,
+    resolution = res,
+    cluster.name = paste0("seurat_cluster_res", res),
+    algorithm = 4 # 4 = Leiden algorithm
+    )
+  for (reduction in reductions) {
+      p <- DimPlot(
+        seu,
+        reduction = reduction,
+        group.by = paste0("seurat_cluster_res", res),
+        label = TRUE
+      )  +
+        labs(title = paste0("Clusters at resolution", res))
+      save_plot(p, paste0("clustering_", reduction, "_res", res))
+  }
+}
+```
+
+This is just temporary, saving the file in between
+
+```{r}
+#| label: chunk-xx-saverds
+dir_data_temp <- file.path(dir_home, "data/temporary")
+file_rds <- file.path(dir_data_temp, "seurat_shortread_astro_clustered.rds")
+saveRDS(seu, file_rds)
 ```
 
 # Session info
