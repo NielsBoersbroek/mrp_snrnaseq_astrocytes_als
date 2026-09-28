@@ -32,28 +32,49 @@ This script was run with the *conda environment* `r_scrnaseq_core`.
 #| label: chunk-extra-setwd-remote-rstudio
 #| include: false
 #| eval: false
-# This code chunk is  necessary when using the remote RStudio server of the HPC
-# You can remove it once you're done with testing
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
 setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
-# The function knitr::current_input also does not work in the RStudio Remote
-# server, as nothing is knitted. Thus, run:
-folder_name <- "01_subsetting_astros.qmd"
-# and comment out the line folder_name <- knitr::current_input(dir = FALSE)
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directories
+dir_data_in <- file.path(dir_home, "data/raw")
+dir_data_out <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "01_subsetting_astros"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
 ```{r}
-#| label: chunk-02-packages-directories
-##  Open packages --------------------------------------------------------------
-
+#| label: chunk-02-packages
 library(Seurat)
 library(tidyverse)
 library(here)
 library(knitr)
+```
 
-
-##  Set directories ------------------------------------------------------------
-
-
+```{r}
+#| label: chunk-03-directories
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -84,7 +105,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
 ```{r}
-#| label: chunk-03-defining-variables
+#| label: chunk-04-defining-variables
 astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 ```
 
@@ -103,39 +124,58 @@ The figures for my written report contain subfigures spread across multiple scri
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
-#| label: chunk-04-helper-save-plot
+#| label: chunk-05-helper-save-plot
 # file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6, 
                       figure = NULL, grob = TRUE) {
   ## Save image on disk as png and pdf
+  p_image <- p + theme_quarto() # Add Quarto-specific theme
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
-  ggsave(file_png, p, width = width, height = height, dpi = 150)
+  ggsave(file_png, p_image, width = width, height = height, dpi = 150)
   file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
-  ggsave(file_pdf, p, width = width, height = height, dpi = 150)
+  ggsave(file_pdf, p_image, width = width, height = height, dpi = 150)
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
+    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p <- ggplotGrob(p)
+      p_rds <- ggplotGrob(p_rds)
     }
     # Save on disk
-    saveRDS(p, file_rds)
+    saveRDS(p_rds, file_rds)
   }
 }
 ```
 
-### theme_manual()
 
-I created my own manual theme to be used for all figures.
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manual()` is used to add themes to figures as they will end up in the manuscript.
 
 ```{r}
-#| label: chunk-04-helper-save-plot
-theme_manual <- function() {
-  theme_classic(base_size = 12) +
+#| label: chunk-06-helper-themes
+theme_quarto <- function(legend_position = "right") {
+  theme_classic() +
     theme(
-      # Still need to choose what I want here
+      plot.title = element_blank(),
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(base_size = 8, legend_position = "none",
+                         axis_text_size = 6, tag_text_size = 14) {
+  theme_classic(base_size = base_size) +
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position,
+      axis.text = element_text(size = axis_text_size),
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        )
     )
 }
 
@@ -147,7 +187,7 @@ In the section **Visualization Astrocyte Frequency**, I'll make barplots with th
 
 
 ```{r}
-#| label: chunk-05-helper-calc-freq
+#| label: chunk-07-helper-calc-freq
 calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   freq_table <- table(
     metadata[, col_celltype],
@@ -174,7 +214,7 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
 `bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument just_astro because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of calc_freq() as input.
 
 ```{r}
-#| label: chunk-06-helper-bar-freq
+#| label: chunk-08-helper-bar-freq
 # The argument freq_type becomes the argument to position in geom_bar.
 # "stack" makes it absolute, "fill" makes it proportional.
 bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
@@ -199,7 +239,7 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
 The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which \[name\] shared with me after her full QC.
 
 ```{r}
-#| label: chunk-07-open-seurat
+#| label: chunk-09-open-seurat
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
 seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
@@ -211,41 +251,34 @@ seu
 \[name\] defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
 ```{r}
-#| label: fig-08-umap-subclass
+#| label: fig-01-umap-subclass
 #| fig-cap: "UMAP of all cell types, coloured by Allen subclass annotation"
 # I want to show both subclass and cellclass. First show subclass
 p_allen_subclass <- DimPlot(
   seu,
   reduction = "umap",
-  group.by = "predicted.id_coarse_allen_subclass",
-  label = TRUE,
-  repel = TRUE
-) +
-  NoLegend() +
-  ggtitle("UMAP after filtering - Allen subclass")
-p_allen_subclass
+  group.by = "predicted.id_coarse_allen_subclass"
+)
+p_allen_subclass + theme_quarto()
 ```
 
 ```{r}
-#| label: fig-09-umap-cellclass
+#| label: fig-02-umap-cellclass
+#| fig-cap: "UMAP of all cell types, coloured by Allen cellclass annotation"
 p_allen_group <- DimPlot(
   seu,
   reduction = "umap",
-  group.by = "predicted.id_coarse_allen_group",
-  label = TRUE,
-  repel = TRUE
-) +
-  NoLegend() +
-  ggtitle("UMAP after filtering - Allen Group")
-p_allen_group
+  group.by = "predicted.id_coarse_allen_group"
+)
+p_allen_group + theme_quarto()
 ```
 
 ```{r}
 #| label: chunk-10-save-plots
 #| echo: false
 # Store the plots, but keep this hidden for the output
-save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass", grob = TRUE, figure = "SF1A")
-save_plot(p_allen_group, "allcelltypes_umap_alangroup", grob = TRUE, figure = "SF1B")
+save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass", figure = "F3A")
+save_plot(p_allen_group, "allcelltypes_umap_alangroup")
 ```
 
 
@@ -254,20 +287,21 @@ save_plot(p_allen_group, "allcelltypes_umap_alangroup", grob = TRUE, figure = "S
 I previously provided the annotation of celltypes, but I would like to confirm that the labelled astrocytes are astrocytes. A FeaturePlot() with astrocyte-marker genes forms a quick way to do so. In the default settings of this document, I provided the astrocyte marker genes `c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")`. You can see that the astrocyte cluster expresses these markers.
 
 ```{r}
-#| label: fig-11-featureplot
+#| label: fig-03-featureplot
+#| fig-cap: "Featureplot of astrocyte markers"
 p_feature <- FeaturePlot(
   seu,
   features = astro_markers,
   reduction = "umap"
 )
-p_feature
+p_feature + theme_quarto()
 ```
 
 ```{r}
-#| label: chunk-12-save-plots
+#| label: chunk-11-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
-save_plot(p_feature, "allcelltypes_featureplot")
+save_plot(p_feature, "allcelltypes_featureplot", figure = "F3B")
 ```
 
 ## Visualization astrocyte frequency
@@ -283,7 +317,7 @@ This section uses the functions `calc_freq` and `bar_freq`, which I created myse
 I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
 
 ```{r}
-#| label: chunk-13-preprocessing-freq
+#| label: chunk-12-preprocessing-freq
 # Extract dataframe from seurat object
 metadata <- seu@meta.data |>
   as.data.frame()
@@ -299,30 +333,32 @@ kable(head(freq_table))
 ```
 
 ```{r}
-#| label: fig-14-absolute-freq
+#| label: fig-04-absolute-freq
+#| fig-cap: "Absolute frequency of cell types"
 p_abs <- bar_freq(freq_table, "stack")
-p_abs
+p_abs + theme_quarto()
 ```
 
 ```{r}
-#| label: fig-15-proportional-freq
+#| label: fig-05-proportional-freq
+#| fig-cap: "Proportional frequency of cell types"
 p_prop <- bar_freq(freq_table, "fill")
-p_prop
+p_prop + theme_quarto()
 ```
 
 ```{r}
-#| label: chunk-16-save-plots
+#| label: chunk-13-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
-save_plot(p_abs, "allcelltypes_barplot_abs")
-save_plot(p_prop, "allcelltypes_barplot_prop")
+save_plot(p_abs, "allcelltypes_barplot_abs", figure = "F3C")
+save_plot(p_prop, "allcelltypes_barplot_prop", figure = "F3D")
 ```
 
 
 ### Frequency astrocyte vs non-astrocyte
 
 ```{r}
-#| label: chunk-17-preprocessing-freq
+#| label: chunk-14-preprocessing-freq
 # Make a column which states whether something is an astrocyte or not
 metadata$astro <- ifelse(
   test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
@@ -338,19 +374,21 @@ kable(head(freq_table))
 ```
 
 ```{r}
-#| label: fig-18-absolute-freq
+#| label: fig-06-absolute-freq
+#| fig-cap: "Absolute frequency of astrocyte vs non-astrocyte"
 p_abs <- bar_freq(freq_table, "stack", just_astro = TRUE)
-p_abs
+p_abs + theme_quarto()
 ```
 
 ```{r}
-#| label: fig-19-proportional-freq
+#| label: fig-07-proportional-freq
+#| fig-cap: "Proportional frequency of astrocyte vs non-astrocyte"
 p_prop <- bar_freq(freq_table, "fill", just_astro = TRUE)
-p_prop
+p_prop + theme_quarto()
 ```
 
 ```{r}
-#| label: chunk-20-save-plots
+#| label: chunk-15-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs_just_astro")
@@ -359,10 +397,10 @@ save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
 
 # Subset astrocytes and save on disk
 
-Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in @fig-08-umap-subclass.
+Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in @fig-01-umap-subclass.
 
 ```{r}
-#| label: chunk-21-subset-astros
+#| label: chunk-16-subset-astros
 seu_astros <- subset(
   seu,
   subset = predicted.id_coarse_allen_subclass == "Astrocytes"
@@ -374,7 +412,7 @@ seu_astros
 Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/processed` rather than `data/raw`: I count the subsetting as preprocessing.
 
 ```{r}
-#| label: chunk-22-save-to-disk
+#| label: chunk-17-save-to-disk
 file_rds <- file.path(dir_data_out, "seu_shortread_astros_subset.rds")
 saveRDS(seu_astros, file_rds)
 ```
@@ -384,6 +422,6 @@ saveRDS(seu_astros, file_rds)
 I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
 
 ```{r}
-#| label: chunk-23-sessioninfo
+#| label: chunk-99-sessioninfo
 sessionInfo()
 ```

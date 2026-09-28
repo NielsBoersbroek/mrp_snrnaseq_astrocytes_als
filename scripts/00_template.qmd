@@ -33,22 +33,14 @@ This script was run with the *conda environment* `[env_name]`.
 #| include: false
 #| eval: false
 # When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of the one below this.
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
 # The here package takes the home directory, but this is not automatically set
 # to the right one on the RStudio remote server.
 # Moreover, I use knitr::current_input(), but that does not work as an
 # interactive session on the RStudio server does not involve any knitting
 
 setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
-
-##  Open packages --------------------------------------------------------------
-
-library(tidyverse)
-library(here)
-library(knitr)
-# [Add any additional, script-specific packages here]
-
-##  Set directories ------------------------------------------------------------
 
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
@@ -71,18 +63,20 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 # rds/grob objects for report figures land here, to be assembled by
 # scripts/[XX]_assemble_manuscript_figures.qmd
 dir_man <- file.path(dir_home, "results/figures/manuscript")
-
 ```
 
 ```{r}
-#| label: chunk-02-packages-directories
-##  Open packages --------------------------------------------------------------
+#| label: chunk-02-packages
 
 library(tidyverse)
 library(here)
 library(knitr)
 # [Add any additional, script-specific packages here]
 
+```
+
+```{r}
+#| label: chunk-03-directories
 ##  Set directories ------------------------------------------------------------
 
 # Get string of home directory. I used the here package, which sets the home
@@ -114,7 +108,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
 ```{r}
-#| label: chunk-03-defining-variables
+#| label: chunk-04-defining-variables
 # [define script-specific variables here]
 ```
 
@@ -133,7 +127,7 @@ The figures for my written report contain subfigures spread across multiple scri
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
-#| label: chunk-04-helper-save-plot
+#| label: chunk-05-helper-save-plot
 # file.path provides the path, but I need to use paste0 to concatenate .png
 save_plot <- function(p, filename, width = 10, height = 6, 
                       figure = NULL, grob = TRUE) {
@@ -163,11 +157,12 @@ save_plot <- function(p, filename, width = 10, height = 6,
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manual()` is used to add themes to figures as they will end up in the manuscript.
 
 ```{r}
-#| label: chunk-05-helper-themes
-theme_quarto <- function() {
+#| label: chunk-06-helper-themes
+theme_quarto <- function(legend_position = "none") {
   theme_classic() +
     theme(
-      plot.title = element_blank()
+      plot.title = element_blank(),
+      legend.position = legend_position
     )
 }
 
@@ -201,7 +196,7 @@ Remember to move the closing </details> tag below, to after your last helper fun
 [Narrative text explaining what this step does and why.]
 
 ```{r}
-#| label: chunk-06-todo
+#| label: chunk-07-todo
 # [analysis-specific code here]
 ```
 
