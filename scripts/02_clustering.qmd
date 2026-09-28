@@ -72,6 +72,9 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 library(tidyverse)
 library(Seurat)
 library(harmony)
+library(msigdbr) # For loading in GO-terms
+library(fgsea) # For running GSEA
+library(presto) # To speed up Seurat's FindMarkers
 
 library(here)
 library(knitr)
@@ -249,8 +252,6 @@ Remember to move the closing </details> tag below, to after your last helper fun
 
 ## Open Seurat and filter
 
-There are some outliers, but there do not seem to be major disturbances in these parameters. As the QC done by \[name\] already contained a lot of filtering and elaborate doublet removal, we can be quite loose with filtering here. Thus, no further filtering will be done.
-
 ```{r}
 #| label: chunk-07-open-seurat
 file_rds <- file.path(dir_data, "seu_shortread_astros_subset.rds")
@@ -326,6 +327,8 @@ summary(seu@meta.data$nFeature_RNA)
 summary(seu@meta.data$percent.mt)
 ```
 
+There are some outliers, but there do not seem to be major disturbances in these parameters. As the QC done by \[name\] already contained a lot of filtering and elaborate doublet removal, we can be quite loose with filtering here. Thus, no further filtering will be done.
+
 ## Standard Seurat processing (Normalize, Variable Features, PCA, UMAP, etc.)
 
 I wanted to remove sex chromosome genes and mitochondrial genes in the FindVariableFeatures step and created the helper function variable_feature_selection() to do so. The vector `sexgenes` should be specific for the genes which are and which are not in your Seurat object, so when I wanted to do this, \[name\] shared a text file with me. In hindsight, this was not the most reproducible or neat approach, but it is what I did all those months ago, so I'll use it now as well. For transparancy, this sex_gene.txt file is also in the Git repo under `/data/metainformation/sex_genes.txt`.
@@ -349,7 +352,19 @@ seu <- RunPCA(seu) # Runs on variable features by default
 seu <- RunHarmony(seu, group.by.vars = "AnonymousID")
 seu <- RunUMAP(seu, reduction = "harmony", dims = 1:dims)
 seu <- FindNeighbors(seu, reduction = "harmony", k.param = k, dims = 1:dims)
+
+
+## Join layers again -----------------------------------------------------------
+
+
+# [name] seperated layers per participant for preprocessing (especially
+# normalization). Later steps needs joined layers, so join them together again.
+seu <- JoinLayers(seu)
 ```
+
+# Clustering
+
+For now, run clusters on many resolutions, so I can inspect everything
 
 ```{r}
 #| label: chunk-xx-clustering
@@ -375,13 +390,281 @@ for (res in resolutions) {
 }
 ```
 
-This is just temporary, saving the file in between
+This is just temporary, saving the file in between so I now I get results which have been run in the conda environment.
 
 ```{r}
 #| label: chunk-xx-saverds
+#| eval: false
 dir_data_temp <- file.path(dir_home, "data/temporary")
 file_rds <- file.path(dir_data_temp, "seurat_shortread_astro_clustered.rds")
 saveRDS(seu, file_rds)
+```
+
+```{r}
+#| label: chunk-xx-readrds
+#| eval: false
+dir_data_temp <- file.path(dir_home, "data/temporary")
+file_rds <- file.path(dir_data_temp, "seurat_shortread_astro_clustered.rds")
+seu <- readRDS(file_rds)
+```
+
+Create some figures to examine
+
+``` {r}
+#| label: fig-01-featureplots
+
+features <- c("CRYAB", "CHI3L1", "SNAP25", "NRXN1")
+
+FeaturePlot(seu, reduction = "umap", features = features)
+
+```
+
+``` {r}
+#| label: fig-02-samples
+
+p <- DimPlot(seu, reduction = "umap", group.by = "AnonymousID")
+save_plot(p, "umap_anonymousid")
+
+```
+
+## Markers for clusters
+
+```{r}
+#| label: chunk-xx-join-layers
+
+# From here on out, we need to join layers again
+seu <- JoinLayers(seu)
+
+```
+
+```{r}
+#| label: chunk-xx-findmarkers-variables
+## Define variables ------------------------------------------------------------
+
+
+# Decide resolution
+res <- 0.2
+# Decide how many plots you want to make for the upregulated and downregulated
+# genes
+number_of_top_pathways_down <- 10 
+number_of_top_pathways_up <- 10
+
+```
+
+
+```{r}
+#| label: chunk-xx-findmarkers
+# Run FindAllMarkers, but with very loose thresholds: I'll run GSEA of GO-terms
+# on it, which means I'll want a gene score of almost all genes
+Idents(seu) <- paste0("seurat_cluster_res", res)
+markers <- FindAllMarkers(
+  seu,
+  logfc.threshold = 0,
+  min.pct = 0.01,
+  verbose = TRUE
+)
+
+# Store the output as a csv for each cluster, so I can easily inspect it 
+
+# Extract the number of clusters present in each resolution
+marker_levels <- markers |>
+  distinct(cluster) |>
+  mutate(cluster = as.numeric(cluster))
+# The previous step created a dataframe, so select the column 'cluster'.
+for (i in marker_levels$cluster) {
+  file_csv <- paste0("markers_", res, "_cluster", i, ".csv")
+  file_csv <- file.path(dir_tab, file_csv)
+  markers |>
+    filter(cluster == i) |>
+    write_csv(file_csv, col_names = TRUE, quote = "none")
+}
+
+```
+
+```{r}
+#| label: chunk-xx-markers-goterms
+## Prepare gene sets ---------------------------------------------------------
+
+
+# Load in the gene set using msigdbr::msigdbr()
+gs_go_bp <- msigdbr(
+  species = "Homo sapiens", 
+  collection = "C5", 
+  subcollection = "GO:BP"
+)
+# Adapt the gene set to the input required for fgsea: it needs to be a list 
+# with your pathway or gene set names, and the genes that make up each pathway.
+gene_sets <- split(x = gs_go_bp$gene_symbol, f = gs_go_bp$gs_name)
+
+
+## Prepare FindMarkers output ----------------------------------------------
+
+
+for (i in marker_levels$cluster) {
+  # The Seurat object contacts both genes given with SYMBOL and with EnsebmlID.
+  # These EnsembleID genes are (???), and are not present in the gene sets of 
+  # GO:BP anyway. These are thus removed from the analysis.
+  # Also subset clusters
+  markers_clust <- markers |>
+    filter(!str_detect(gene, "ENSG") & cluster == i) |>
+    arrange(desc(avg_log2FC))
+  # I decided to run it by fold change based on this discussion:
+  # https://github.com/alserglab/fgsea/issues/50
+
+  # Extract a named vector of the ranked genes
+  gene_scores <- markers_clust$avg_log2FC
+  names(gene_scores) <- markers_clust$gene
+
+  gsea_res <- fgsea(
+    pathways = gene_sets, # List of gene sets to check
+      stats = gene_scores,
+    scoreType = 'std', # std as we have both pos and neg rankings
+    minSize = 10, # otherwise I only get pathways with 2-5 genes
+    maxSize = 500,
+  )
+  
+  file_csv <- paste0("goterms_", res, "_cluster", i, ".csv")
+  file_csv <- file.path(dir_tab, file_csv)
+  write_csv(gsea_res, file_csv, col_names = TRUE, quote = "none")
+  
+  ## Create a visualization
+  top_pathways_up <- gsea_res |>
+    filter(ES > 0) |>
+    arrange(pval) |>
+    slice_head(n = number_of_top_pathways_up) |>
+    pull(pathway)
+  top_pathways_down <- gsea_res |>
+    filter(ES < 0) |>
+    arrange(pval) |>
+    slice_head(n = number_of_top_pathways_down) |>
+    pull(pathway)
+  top_pathways <- c(top_pathways_up, rev(top_pathways_down))
+
+  p <- plotGseaTable(
+    gene_sets[top_pathways], 
+    stats = gene_scores, 
+    fgseaRes = gsea_res, 
+    gseaParam = 0.5 # Makes the figure clearer
+    )
+  save_plot(p, paste0("goterms", res, "_cluster", i))
+}
+
+```
+
+
+The chunk below was an old version
+```{r}
+#| label: chunk-xx-goterms
+#| eval: false
+
+# Decide how many plots you want to make for the upregulated and downregulated
+# genes
+number_of_top_pathways_down <- 10 
+number_of_top_pathways_up <- 10
+
+
+## Prepare gene sets ---------------------------------------------------------
+
+
+# Load in the gene set using msigdbr::msigdbr()
+gs_go_bp <- msigdbr(
+  species = "Homo sapiens", 
+  collection = "C5", 
+  subcollection = "GO:BP"
+)
+# Adapt the gene set to the input required for fgsea: it needs to be a list 
+# with your pathway or gene set names, and the genes that make up each pathway.
+gene_sets <- split(x = gs_go_bp$gene_symbol, f = gs_go_bp$gs_name)
+
+
+## Prepare FindMarkers output ----------------------------------------------
+
+res <- 0.2
+# I need to run FindMarkers with low thresholds, to include all genes
+Idents(seu) <- paste0("seurat_cluster_res", res)
+
+# Run FindAllMarkers with quite strict thresholds. Only test positive genes.
+markers <- FindAllMarkers(
+  seu,
+  logfc.threshold = 0,
+  min.pct = 0.05,
+  verbose = TRUE
+)
+
+cluster_select <- 1
+
+# The Seurat object contacts both genes given with SYMBOL and with EnsebmlID.
+# These EnsembleID genes are (???), and are not present in the gene sets of 
+# GO:BP anyway. These are thus removed from the analysis.
+# Also subset clusters
+markers_clust <- markers |>
+  filter(!str_detect(gene, "ENSG") & cluster == cluster_select)
+
+# -----------------------------------------------------------------------------
+## DID NOT END UP USING THIS
+
+# We will use adjusted p-values to rank, with the sign of log2fc so I can
+# distinguish upregulated and downregulated genes
+# 500 is safe, as the highest it otherwise gets is about 300/-300
+markers_clust <- markers_clust |>
+  mutate(
+    rankings = sign(avg_log2FC)*(-log10(p_val_adj)),
+    rankings = case_when(
+      rankings == Inf ~ 500,
+      rankings == -Inf ~ -500,
+      .default = rankings
+    )
+  ) |>
+  arrange(desc(rankings))
+
+
+markers_clust <- markers_clust[as.matrix(markers_clust) == Inf]  <- 500
+markers_clust <- markers_clust[markers_clust$rankings == -Inf,]  <- -500
+
+# Extract a named vector of the ranked genes
+gene_scores <- markers_clust$rankings
+names(gene_scores) <- markers_clust$gene
+
+# -----------------------------------------------------------------------------
+
+# I decided to run it by fold change based on this discussion:
+# https://github.com/alserglab/fgsea/issues/50
+
+markers_clust <- markers_clust |>
+  arrange(desc(avg_log2FC))
+
+# Extract a named vector of the ranked genes
+gene_scores <- markers_clust$avg_log2FC
+names(gene_scores) <- markers_clust$gene
+
+gsea_res <- fgsea(
+  pathways = gene_sets, # List of gene sets to check
+  stats = gene_scores,
+  scoreType = 'std', # std as we have both pos and neg rankings
+  minSize = 10, # otherwise I only get pathways with 2-5 genes
+  maxSize = 500,
+)
+  
+## Create a visualization
+top_pathways_up <- gsea_res |>
+  filter(ES > 0) |>
+  arrange(pval) |>
+  slice_head(n = number_of_top_pathways_up) |>
+  pull(pathway)
+top_pathways_down <- gsea_res |>
+  filter(ES < 0) |>
+  arrange(pval) |>
+  slice_head(n = number_of_top_pathways_up) |>
+  pull(pathway)
+top_pathways <- c(top_pathways_up, rev(top_pathways_down))
+
+plotGseaTable(
+  gene_sets[top_pathways], 
+  stats = gene_scores, 
+  fgseaRes = gsea_res, 
+  gseaParam = 0.5 # Makes the figure clearer
+  )
+
 ```
 
 # Session info
