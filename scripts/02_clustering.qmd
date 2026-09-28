@@ -266,6 +266,42 @@ top_markers <- function(markers, cluster_select = NULL, n_genes = 10,
 }
 ```
 
+### bar_freq()
+
+`bar_freq()` creates the visualizations of cell composition. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. \[What input expected?\] I added the argument `theme_manuscript` because I wanted to apply the functions `theme_quarto()` and `theme_manuscript()`, but applying these themes after I ran the function `bar_freq()` meant that ` + theme(axis.text.x = element_text(angle = 90))` gets overwritten - which is essential for making the x-axis readable. Thus, I had to add `theme_quarto()` or `theme_manuscript()` within the `bar_freq()` function, so I can adjust x-axis labels afterwards.
+
+```{r}
+#| label: chunk-08-helper-bar-freq
+# The argument freq_type becomes the argument to position in geom_bar.
+# "stack" makes it absolute, "fill" makes it proportional.
+bar_freq <- function(cell_counts, freq_type = "fill", variable = "AnonymousID",
+                    theme_manuscript = FALSE) {
+  # For ggplot2, I need to pivot longer, so that each count becomes a row
+  cell_counts_ggplot <- cell_counts |> pivot_longer(
+    cols = c("GM Astrocyte", "WM Astrocyte 1", "WM Astrocyte 2"),
+    names_to = "cellstate",
+    values_to = "count"
+  )
+  
+  p_bar <- ggplot(
+    cell_counts_ggplot, 
+    aes(fill = cellstate, y = count, x = .data[[variable]]),
+    ) +
+    geom_bar(position = freq_type, stat = "identity")
+
+  # Apply either theme_manuscript() or theme_quarto()
+  if (theme_manuscript) {
+    p_bar <- p_bar + theme_manuscript()
+  } else {
+    p_bar <- p_bar + theme_quarto(legend_position = "right")
+  }
+  # Rotate x-axis labels, otherwise the x-axis becomes unreadable 
+  p_bar <- p_bar + theme(axis.text.x = element_text(angle = 90)) 
+  
+  p_bar
+}
+```
+
 <!-- [Add any additional, script-specific helper functions here as their own
 ### function_name() subsection, following the same pattern as save_plot() above.
 Remember to move the closing </details> tag below, to after your last helper function.] -->
@@ -659,50 +695,69 @@ p_ann_umap <- DimPlot(seu, reduction = "umap", group.by = "annotation")
 p_ann_umap
 ```
 
-
-# Cell composition analysis
-
-
-
-
-```{r}
-#| label: chunk-xx-clustering
-#| eval: false
-
-# I previously ran this to examine multiple resolutions
-reductions <- c("pca", "umap")
-
-for (res in resolutions) {
-  seu <- FindClusters(
-    seu,
-    resolution = res,
-    cluster.name = paste0("seurat_cluster_res", res),
-    algorithm = 4 # 4 = Leiden algorithm
-    )
-  for (reduction in reductions) {
-      p <- DimPlot(
-        seu,
-        reduction = reduction,
-        group.by = paste0("seurat_cluster_res", res),
-        label = TRUE
-      )  +
-        labs(title = paste0("Clusters at resolution", res))
-      save_plot(p, paste0("clustering_", reduction, "_res", res))
-  }
-}
-```
-
-
+## Potentially WES enrichment
 
 # Cell composition analysis
 
 ## Figures with ggplot
 
+First create a count table. ggplot2 and scCODA require slightly different input: for ggplot, I need to pivot_longer. I'll do that in the bar_freq function
+
+```{r}
+metadata <- seu@meta.data
+
+# Select columns to test
+col_selection <- c(
+  "AnonymousID", 
+  "Gender", 
+  "primary_site_of_onset", 
+  "pTDP43_lumped", 
+  "disease.subtype"
+)
+
+# Create a metadata table which only has one row per participant
+metadata_sample <- metadata |>
+  distinct(AnonymousID, .keep_all = TRUE) |>
+  select(all_of(col_selection))
+
+# Create a count table of the astrocyte clusters and join it with the sample
+# metadata
+cell_counts <- metadata |>
+  count(AnonymousID, annotation) |>
+  pivot_wider(
+    names_from = annotation,
+    values_from = n
+  ) |>
+  inner_join(
+    metadata_sample,
+    by = join_by(AnonymousID)
+  )
+cell_counts
+```
+```{r}
+#| label: fig-xx-cell-comp
+
+p_bar <- bar_freq(cell_counts, variable = "disease.subtype")
+p_bar
+
+# The legend isn't right because the quarto theme has it turned off
+```
+
 
 ## Statistical test with scCODA
 
+```{python}
+
+```
+
+# Save on disk
 
 
+```{r}
+#| label: chunk-xx-save-to-disk
+file_rds <- file.path(dir_data_out, "seu_shortread_astros_clustered.rds")
+saveRDS(seu_astros, file_rds)
+```
 
 # Temporary file saving
 
