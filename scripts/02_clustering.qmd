@@ -325,36 +325,6 @@ Some ugliness in the metadata, I'm fixing it here, in the root.
 - Only one sample has pTDP-43 stage 2, so I lumped it together with 3 - otherwise comparison with stage 2 always looks weird, because it has n = 1.
 - The controls have empty strings in the column `primary_site_of_onset`, set these to `"Ctrl"`
 
-```{r}
-#| label: chunk-xx-metadata-fix
-
-metadata <- seu@meta.data
-
-# How to fix the metadata of pTDP-43 stage:
-metadata <- metadata |>
-  mutate(
-    pTDP.43.Stage = case_when(
-      AnonymousID %in% c("ALS17", "ALS18") ~ "FUS ALS",
-      str_detect(AnonymousID, "Ctrl") == TRUE ~ "Ctrl",
-      .default = as.character(pTDP.43.Stage)
-    ),
-    # The Ctrls have "" at primary_site_of_onset. Make this "Ctrl"
-    primary_site_of_onset = ifelse(
-      str_detect(AnonymousID, "Ctrl") == TRUE,
-      "Ctrl",
-      primary_site_of_onset
-    ),
-    pTDP43_lumped = case_when(
-      pTDP.43.Stage %in% c("2", "3") ~ "2 & 3",
-      .default = as.character(pTDP.43.Stage)
-    ),
-    # This relevel steps makes the visualizations make more sense
-    pTDP43_lumped = fct_relevel(pTDP43_lumped, "Ctrl", "FUS ALS")
-  )
-
-seu@meta.data <- metadata
-```
-
 ## Visualize some QC metrics
 
 ```{r}
@@ -428,7 +398,7 @@ seu <- JoinLayers(seu)
 
 I assessed multiple clustering resolutions and chose to continue with cluster resolution 0.15, as higher resolutions create clusters which are hardly distinguishable from one another. The rest of the script assumes the clustering resolution is set at 0.15, so users can change it in the section "Defining variables", but this does mess up some of the next chunks.
 
-```{r]}
+```{r}
 #| label: chunk-xx-clustering
 
 # I set the script at cluster resolution 0.2. You can change it, but that messes
@@ -493,6 +463,7 @@ Top markers for each cluster
 
 ```{r}
 #| label: chunk-xx-topmarkers
+# Probably better to select p_adj < 0.05 and then sort by fold-change
 top_markers(markers, cluster_select = 1, minimum_log2fc = 1.5) |> knitr::kable()
 top_markers(markers, cluster_select = 2) |> knitr::kable()
 top_markers(markers, cluster_select = 3) |> knitr::kable()
@@ -636,13 +607,13 @@ p_gsea1 <- plot_list[[1]]
 p_gsea1
 ```
 ```{r}
-#| label: fig-xx-gsea-clust1
+#| label: fig-xx-gsea-clust2
 p_gsea2 <- plot_list[[2]]
 p_gsea2
 ```
 
 ```{r}
-#| label: fig-xx-gsea-clust1
+#| label: fig-xx-gsea-clust3
 p_gsea3 <- plot_list[[3]]
 p_gsea3
 ```
@@ -690,7 +661,7 @@ p_ann_pca
 ```
 
 ```{r}
-#| label: fig-xx-annotated-pca
+#| label: fig-xx-annotated-umap
 p_ann_umap <- DimPlot(seu, reduction = "umap", group.by = "annotation")
 p_ann_umap
 ```
@@ -704,6 +675,7 @@ p_ann_umap
 First create a count table. ggplot2 and scCODA require slightly different input: for ggplot, I need to pivot_longer. I'll do that in the bar_freq function
 
 ```{r}
+#| label: chunk-xx-create-count-table
 metadata <- seu@meta.data
 
 # Select columns to test
@@ -747,7 +719,8 @@ p_bar
 ## Statistical test with scCODA
 
 ```{python}
-
+#| label: chunk-xx-sccoda
+#| eval: false
 ```
 
 # Save on disk
@@ -755,8 +728,8 @@ p_bar
 
 ```{r}
 #| label: chunk-xx-save-to-disk
-file_rds <- file.path(dir_data_out, "seu_shortread_astros_clustered.rds")
-saveRDS(seu_astros, file_rds)
+file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
+saveRDS(seu, file_rds)
 ```
 
 # Temporary file saving
