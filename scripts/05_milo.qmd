@@ -1,0 +1,239 @@
+---
+title: "[Title of analysis]"
+author: "Niels Boersbroek"
+date: "[Month] [Day], 2026"
+format: 
+  html:
+    toc: true
+    theme: materia
+    embed-resources: true
+---
+
+<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
+
+# Differential abundance with Milo
+
+[Introduction text here: what does this script do, why, and how does it fit into the rest of the project?]
+
+```{r}
+#| label: chunk-01-setup
+#| include: false
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Preparation
+
+## Prerequisites
+
+This script was run with the *conda environment* `[env_name]`.
+
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "05_milo"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+```{r}
+#| label: chunk-02-packages
+
+library(tidyverse)
+library(Seurat)
+library(miloR)
+library(SingleCellExperiment)
+
+library(here)
+library(knitr)
+
+```
+
+```{r}
+#| label: chunk-03-directories
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- knitr::current_input(dir = FALSE)
+folder_name <- str_remove(folder_name, "\\.\\w*$")
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+
+```{r}
+#| label: chunk-04-defining-variables
+# [define script-specific variables here]
+```
+
+## Helper functions
+
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
+### save_plot()
+
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure. You will not see saving of figures happening in this HTML output file, because I hid those chunks with `echo: false`.
+
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set `figure` to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+
+A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
+
+```{r}
+#| label: chunk-05-helper-save-plot
+save_plot <- function(p, filename, width = 10, height = 6, 
+                      figure = NULL, grob = TRUE) {
+  ## Save image on disk as png and pdf
+  p_image <- p + theme_quarto() # Add Quarto-specific theme
+  file_png <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(file_png, p_image, width = width, height = height, dpi = 150)
+  file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p_image, width = width, height = height, dpi = 150)
+  
+  ## Save the ggplot object on disk as an rds file 
+  if (!is.null(figure)) {
+    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+    # Convert the object to a grob if needed
+    if (grob) {
+      p_rds <- ggplotGrob(p_rds)
+    }
+    # Save on disk
+    saveRDS(p_rds, file_rds)
+  }
+}
+```
+
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+
+```{r}
+#| label: chunk-06-helper-themes
+theme_quarto <- function(legend_position = "none") {
+  theme_classic() +
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(base_size = 8, legend_position = "none",
+                         axis_text_size = 6, tag_text_size = 14) {
+  theme_classic(base_size = base_size) +
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position,
+      axis.text = element_text(size = axis_text_size),
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        )
+    )
+}
+
+```
+
+<!-- [Add any additional, script-specific helper functions here as their own
+### function_name() subsection, following the same pattern as save_plot() above.
+Remember to move the closing </details> tag below, to after your last helper function.] -->
+
+</details>
+
+# Running Milo
+
+## Convert Seurat to Milo object
+
+[Narrative text explaining what this step does and why.]
+
+```{r}
+#| label: chunk-xx-open-seurat
+file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
+seu <- readRDS(file_rds)
+
+## Seurat needs to be converted to sce
+# Convert to an sce object, as slingshot does not work on seurat
+sce <- as.SingleCellExperiment(seu)
+# Milo requires a specific milo-object. The major differences between the Milo
+# and SingleCellExperiment object are in the extra slots of the Milo object,
+# such as those where nhood values are stored.
+milo <- Milo(sce)
+
+# Store the previously computed PCA and UMAP to the milo object
+# For the PCA, use the integrated reduction ("harmony")
+reducedDim(milo, "PCA") <- Embeddings(snrna_astros, reduction = "harmony")
+reducedDim(milo, "UMAP") <- Embeddings(snrna_astros, reduction = "umap")
+
+# Remove the Seurat and SCE objects to save memory
+rm(snrna_astros)
+rm(sce)
+
+```
+
+## Run Milo
+
+Will I run it for multiple values of k?
+
+```{r}
+#| label: fig-01-description
+#| fig-cap: "Caption figure"
+# [Figure  here. Count seperately for figure chunks and non-figure chunks]
+```
+
+# Session info
+
+I used the conda environment `[env_name]` to run this script. You can find major package versions in the file `/environments/[env_name].yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+
+```{r}
+#| label: chunk-99-sessioninfo
+sessionInfo()
+```
