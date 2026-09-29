@@ -108,9 +108,11 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
+I tested Milo for multiple values of `k` (the K used for KNN graph building), but it had little effect on results. I therefore ended up using the default `k` value, which is 10
+
 ```{r}
 #| label: chunk-04-defining-variables
-# [define script-specific variables here]
+k <- 10
 ```
 
 ## Helper functions
@@ -210,24 +212,182 @@ milo <- Milo(sce)
 
 # Store the previously computed PCA and UMAP to the milo object
 # For the PCA, use the integrated reduction ("harmony")
-reducedDim(milo, "PCA") <- Embeddings(snrna_astros, reduction = "harmony")
-reducedDim(milo, "UMAP") <- Embeddings(snrna_astros, reduction = "umap")
+reducedDim(milo, "PCA") <- Embeddings(seu, reduction = "harmony")
+reducedDim(milo, "UMAP") <- Embeddings(seu, reduction = "umap")
 
 # Remove the Seurat and SCE objects to save memory
-rm(snrna_astros)
+rm(seu)
 rm(sce)
 
 ```
 
 ## Run Milo
 
-Will I run it for multiple values of k?
+I used all default settings to run Milo. One can change the `k` parameter in defining variables, I deliberately set this at 10.
 
 ```{r}
-#| label: fig-01-description
-#| fig-cap: "Caption figure"
-# [Figure  here. Count seperately for figure chunks and non-figure chunks]
+#| label: chunk-xx-graph-nhoods
+# Construct a KNN graph. As I transfered the reduction "harmony" to the
+# reductionname "PCA", it will automatically use this reduction for all
+# following steps.
+milo <- buildGraph(
+  milo,
+  k = k,
+  d = 50, # default setting
+)
+# Define neighbourhoods. Settings are default
+milo <- makeNhoods(
+  milo,
+  prop = 0.1,
+  k = k,
+  d = 50, # default setting
+  refined = TRUE,
+)
+
 ```
+
+If the number of cells per neighborhood is too low, I should adapt the k parameter (tutorial recommends to have the distribution peaking above 20).
+
+```{r}
+#| label: fig-xx-nhoodsize
+#| fig-cap: "The number of cells which belong to each neighborhood"
+p_nhoodsize <- plotNhoodSizeHist(milo)
+p_nhoodsize
+```
+
+```{r}
+#: label: chunk-xx-save-plot-nhoodsize
+save_plot(p_nhoodsize, "hist_nhoodsize")
+```
+
+The rest of milo works by analysing the cell counts per neighborhood per sample. In my data, the sample is given with the column "AnonymousID".
+
+```{r}
+#| label: chunk-xx-countcells
+milo <- countCells(
+  milo,
+  meta.data = data.frame(colData(milo)),
+  sample = "AnonymousID"
+)
+```
+
+To perform differential abundance testing with Milo, I need an additional dataframe with metadata. In my case, I want to test for the column "condition" (= ALS vs Ctrls). I first ran Milo months ago and my `dplyr` skills were not yet that good back then, so I got the solution below from [here](https://hbctraining.github.io/Pseudobulk-for-scRNAseq/lessons/08a_miloR.html). Might as well still use it, but credit where credit's due. 
+```{r}
+#| label: chunk-xx-prepare-metadata
+milo_design <- colData(milo) |>
+  data.frame() |>
+  select(AnonymousID, condition) |>
+  distinct() |>
+  remove_rownames() |>
+  column_to_rownames("AnonymousID")
+# Reorder rownames to match columns of nhoodCounts()
+order_rows <- colnames(nhoodCounts(milo))
+milo_design <- milo_design[order_rows, , drop = FALSE]
+
+```
+
+```{r}
+#| label: chunk-xx-test-nhoods
+milo <- calcNhoodDistance(milo, d = 50) # Same d as buildGraph()
+
+da_results <- testNhoods(
+  milo,
+  design = ~condition,
+  design.df = milo_design
+)
+```
+
+### Inspect results
+
+```{r}
+#| label: fig-xx-pval-hist
+p_pval <- ggplot(da_results, aes(PValue)) +
+    geom_histogram(bins = 50)
+p_pval
+```
+
+```{r}
+#| label: fig-xx-logfc-volcano
+p_logfc <- ggplot(da_results, aes(logFC, -log10(SpatialFDR))) +
+  geom_point() +
+  geom_hline(yintercept = 1)
+p_logfc
+```
+
+Add metadata to results by annotating neighborhoods by condition
+```{r}
+#| label: chunk-xx-annotate-hoods
+# Annotate neighborhoods by condition
+da_results <- annotateNhoods(milo, da_results, coldata_col = "condition")
+# Categorize neighborhoods with < 70% of one condition as mixed
+da_results$anno_condition <- ifelse(
+  da_results$condition_fraction < 0.7,
+  "Mixed",
+  da_results$condition # The neighborhoods which are not mixed get ALS or Ctrl
+)
+```
+
+Find group structure of neighborhoods. In practice, it runs louvain
+clustering to identify neighborhoods which are overlapping and thus similar
+to each other. The max.lfc.delta argument determines the cutoff of fold
+change, and can kind-of be considered like the resolution of a clustering algorithm. With one, I set it quite low.
+
+The neighborhood graph is needed to map the results to an embedding. Each
+node will represent a neighbourhood and each edge indicates the number of
+cells the neighbourhouds have in common.
+milo <- buildNhoodGraph(milo)
+
+```{r}
+#| label: chunk-xx-group-hoods
+# Find group structure of neighborhoods
+da_results <- groupNhoods(milo, da_results, max.lfc.delta = 1)
+
+# Build a graph across the neighborhood groups
+milo <- buildNhoodGraph(milo)
+```
+
+plotNhoodGraphDA directly visualizes the da_results, whereas plotNhoodGroups
+plots the groups created with groupNhoods.
+The alpha is the FDR significance threshold (0.05 is default)
+
+```{r}
+#| label: figure-xx-nhood-da
+p_nhood_da <- plotNhoodGraphDA(milo, da_results, alpha = 0.05)
+p_nhood_da
+```
+
+```{r}
+#| label: figure-xx-nhood-groups
+p_nhood_groups <- plotNhoodGroups(milo, da_results) +
+  theme(legend.position = "none")
+p_nhood_groups
+```
+
+```{r}
+#| label: figure-xx-nhood-together
+p1 + p2
+```
+
+```{r}
+#| label: figure-xx-nhood-da-loose
+p_nhood_da_loose <- plotNhoodGraphDA(milo, da_results, alpha = 1)
+p_nhood_da_loose
+```
+
+# Write results to disk
+
+I'll write both the dataframe of the results and the milo object on disk
+
+```{r}
+#| label: chunk-xx-save-to-disk
+file_csv <- file.path(dir_tab, "milo_da_results.csv")
+write_csv2(da_results, file_csv)
+
+file_rds <- file.path(dir_data, "milo_shortread_astros.rds")
+saveRDS(milo, file_rds)
+
+```
+
 
 # Session info
 
