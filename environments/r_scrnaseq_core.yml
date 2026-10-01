@@ -18,17 +18,20 @@ dependencies:
 - bioconductor-fgsea=1.32.2
 - r-msigdbr=26.1.1
 
-# For script 05_slingshot
+# For script 03_trajectory_slingshot
 - bioconductor-slingshot=2.14.0
-- bioconductor-tradeseq=1.20.0
+- bioconductor-delayedmatrixstats # necessary for slingshot, somehow not installed
 - r-viridis
 - r-ggridges
 
-# For script 07_milo
+# For script 05_tradeseq
+- bioconductor-tradeseq=1.20.0
+
+# For script 06_milo
 - bioconductor-milor=2.2.0
 - bioconductor-singlecellexperiment=1.28.0
 
-# For script 08_hdwgcna.R
+# For script 07_hdwgcna.R
 - r-wgcna=1.74
 - r-devtools # To install hdWGCNA
 - bioconductor-ucell
