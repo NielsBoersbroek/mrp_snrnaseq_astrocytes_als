@@ -365,7 +365,7 @@ p_nhood_groups
 
 ```{r}
 #| label: figure-xx-nhood-together
-p1 + p2
+p_nhood_da + p_nhood_groups
 ```
 
 ```{r}
