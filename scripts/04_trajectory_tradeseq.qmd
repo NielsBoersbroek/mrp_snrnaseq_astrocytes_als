@@ -1,0 +1,447 @@
+---
+title: "06: Trajectory Inference with Slingshot - TradeSeq DE"
+author: "Niels Boersbroek"
+date: "October 1, 2026"
+format: 
+  html:
+    toc: true
+    theme: materia
+    embed-resources: true
+---
+
+<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
+
+# [Title of analysis]
+
+TradeSeq allows you to examine gene expression changes after inferring pseudotime with another package (the tradeSeq vignette literally starts from a slingshot object). It uses a negative binomial generalized additive model.
+
+```{r}
+#| label: chunk-01-setup
+#| include: false
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Preparation
+
+## Prerequisites
+
+This script was run with the *conda environment* `[env_name]`.
+
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "04_trajectory_tradeseq"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+```{r}
+#| label: chunk-02-packages
+
+library(tidyverse)
+library(slingshot)
+library(tradeSeq)
+library(here)
+library(knitr)
+
+
+```
+
+```{r}
+#| label: chunk-03-directories
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- knitr::current_input(dir = FALSE)
+folder_name <- str_remove(folder_name, "\\.\\w*$")
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+
+filter_min_pt selects the threshold for the percentage of cells a gene must be expressed in to be included for fitGAM(). Deliberately set high as fitGAM has a high computing time
+
+```{r}
+#| label: chunk-04-defining-variables
+
+filter_min_pt <- 5
+```
+
+## Helper functions
+
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
+### save_plot()
+
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure. You will not see saving of figures happening in this HTML output file, because I hid those chunks with `echo: false`.
+
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set `figure` to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+
+A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
+
+```{r}
+#| label: chunk-05-helper-save-plot
+save_plot <- function(p, filename, width = 10, height = 6, 
+                      figure = NULL, grob = TRUE) {
+  ## Save image on disk as png and pdf
+  p_image <- p + theme_quarto() # Add Quarto-specific theme
+  file_png <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(file_png, p_image, width = width, height = height, dpi = 150)
+  file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p_image, width = width, height = height, dpi = 150)
+  
+  ## Save the ggplot object on disk as an rds file 
+  if (!is.null(figure)) {
+    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+    # Convert the object to a grob if needed
+    if (grob) {
+      p_rds <- ggplotGrob(p_rds)
+    }
+    # Save on disk
+    saveRDS(p_rds, file_rds)
+  }
+}
+```
+
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+
+```{r}
+#| label: chunk-06-helper-themes
+theme_quarto <- function(legend_position = "none") {
+  theme_classic() +
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(base_size = 8, legend_position = "none",
+                         axis_text_size = 6, tag_text_size = 14) {
+  theme_classic(base_size = base_size) +
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position,
+      axis.text = element_text(size = axis_text_size),
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        )
+    )
+}
+
+```
+
+### printable_results()
+
+For each test I'll run with tradeSeq, I'll want to perform multiple tests and print the most interesting result of each test (significant adjusted p-value, sort descending by fold change). The function `print_test_table` works for the three test I'll run (`associationTest()`, `startVsEndTset()` and `patternTest()`) - all are a little different, so I needed to adjust the code a little for each one. startVsEndTest() provides results for all lineages seperately, so the argument `lineage` provides of which lineage one wants results. 
+
+tradeSeq does not automatically adjust p-values, so I do that for each.
+
+I want all results automatically saved on disk, but there is the option to turn this off
+
+```{r}
+#| label: chunk-xx-helper-printable-results
+
+printable_results <- function(results, test = NULL, lineage = NULL,
+                              save_csv = TRUE) {
+  results <- results  |>
+    rownames_to_column(var = "gene") |>
+    mutate(p_adj = p.adjust(pvalue, method = "BH"))
+  
+  if(is.null(test)) {
+    stop("You did not provide what test you ran")
+  } else if (str_detect(test, regex("association", ignore_case = TRUE))) {
+    results <- results |>
+      filter(p_adj < 0.05) |>
+      arrange(desc(meanLogFC))
+  } else if (str_detect(test, regex("startVsEnd", ignore_case = TRUE))) {
+    if (is.null(lineage)) {
+      stop("You did not provide a lineage!")
+    } else{
+      # Adjust p-value per lineage
+      results <- results |>
+        mutate(
+            across(
+            starts_with("pvalue_lineage"), 
+            ~ p.adjust(.x, method = "BH"), 
+            .names = "adj_{.col}"
+          )
+        ) 
+      # Then extract results of given lineage
+      lineage <- as.character(lineage)
+      results <- results |>
+        select(ends_with(lineage)) |>
+        # !!sym(paste0()) makes it work without hardcoding the lineage
+        filter(!!sym(paste0("adj_pvalue_lineage", lineage)) < 0.05) |>
+        arrange(!!sym(paste0("logFClineage", lineage)))
+    } 
+  } else if (str_detect(test, regex("pattern", ignore_case = TRUE))) {
+    results <- results |>
+      filter(p_adj < 0.05) |>
+      arrange(desc(fcMedian))
+  }
+  
+  # Save the results to disk as csv.
+  if (save_csv) {
+    # If startVsEndTest, add the lineage to the filename
+    if (str_detect(test, regex("startVsEnd", ignore_case = TRUE))) {
+      file_csv <- paste0("tradeseq_", test, "_lin", lineage, ".csv")
+    } else {
+      file_csv <- paste0("tradeseq_", test, ".csv")
+    }
+    file_csv <- file.path(dir_tab, file_csv)
+    write_csv(results, file_csv)
+  }
+  
+  results
+}
+
+```
+
+
+<!-- [Add any additional, script-specific helper functions here as their own
+### function_name() subsection, following the same pattern as save_plot() above.
+Remember to move the closing </details> tag below, to after your last helper function.] -->
+
+</details>
+
+# [Analysis section 1: name it after what this part of the script actually does]
+
+## [Subsection as needed]
+
+Open the sce with Slingshot results
+
+```{r}
+#| label: chunk-07-open-sce
+file_rds <- file.path(dir_data, "sce_shortread_astros_slingshot.rds")
+sce <- readRDS(file_rds)
+
+# Extract what's needed for tradeSeq
+pseudotime <- slingPseudotime(sce, na = FALSE)
+cell_weights <- slingCurveWeights(sce)
+counts <- counts(sce)
+```
+
+I will later use GO terms, which only works on SYMBOL genes. SYMBOL is the default in our seurat object, but we also have some EnsemblID genes. These should not be included in our tradeSeq test.
+
+I also filtered on genes which are expressed in a minimum percentage of cells. I did this because fitGAM() requires a lot of computing time and resources, and reducing the number of genes reduces this.
+
+
+```{r}
+#| label: chunk-08-gene-selection
+# Filter genes which are expressed in a minimum proportion of cells
+expressed_in_cells <- rowSums(counts > 0)
+expressed_in_cells_pt <- expressed_in_cells / ncol(sce) * 100
+genes_keep <- rownames(sce)[expressed_in_cells_pt >= filter_min_pt]
+
+# Filter genes with SYMBOL name
+# Might not be the most straight-forward way, but I prefer using dplyr
+genes_keep <- genes_keep |>
+  as_tibble() |>
+  filter(!str_detect(value, "ENSG")) |>
+  pull(value)
+length(genes_keep)
+
+```
+
+```{r}
+#| label: chunk-extra-test-run
+# For the test run, randomly select 500 genes
+# Set seed so that I can compare multiple runs
+set.seed(1234)
+genes_keep <- sample(genes_keep, size = 500)
+# Filename for test run:
+file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq_test.rds")
+
+# Print time to see how long it took
+Sys.time()
+
+```
+
+```{r}
+#| label: chunk-extra-test-run-2
+#| eval: true
+# Print time to see how long it took
+Sys.time()
+
+```
+
+This is very computationally heavy; only run it if it has not yet been run before (i.e. if the file with the results is not yet stored on disk).
+
+```{r}
+#| label: chunk-09-run-fitgam
+# Uncomment line below when not performing test_run
+file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq.rds")
+if(file.exists(file_rds)) {
+  # If it already exists, just open from disk
+  sce_tradeseq <- readRDS(file_rds)
+} else {
+  # Prepare parallel computing
+  n_workers <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "1"))
+  bp <- BiocParallel::MulticoreParam(workers = n_workers)
+  
+  # Run fitGAM()
+  sce_tradeseq <- fitGAM(
+    counts = counts,
+    pseudotime = pseudotime,
+    cellWeights = cell_weights,
+    nknots = 6, # 6 knots balances flexibility and overfitting
+    verbose = TRUE,
+    genes = genes_keep,
+    parallel = TRUE,
+    BPPARAM = bp
+  )
+  
+  # Save on disk. I'm doing so in this chunk within the conditional statemtn
+  # so that it only saves when fitGAM() was actually ran
+  saveRDS(sce_tradeseq, file_rds)
+}
+
+```
+
+```{r}
+#| label: chunk-extra-test-run-2
+#| eval: true
+# Print time to see how long it took
+Sys.time()
+
+```
+
+# Statistical tests
+
+```{r}
+#| label: chunk-extra-load-test-result
+#| eval: false
+
+# I have not ran the actual results yet, but can open my test runs to check
+# whether the tests work
+ file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq_res0.4_test500genes_2workers.rds")
+sce_tradeseq <- readRDS(file_rds)
+
+```
+
+Associationtest finds genes which have general associations with lineages. These are not yet gene-specific.
+
+```{r}
+#| label: chunk-xx-associaton-test
+res_asso <- associationTest(sce_tradeseq)
+
+printable_asso <- printable_results(res_asso, test = "association")
+printable_asso
+```
+
+StartVsEndTest tests which genes go up/dowm from start to end per lineage. This is probably the most important one, as I actually get lineage specifics here.
+
+I set threshold at log(2). This tests which genes have a fold change that is significantly higher than 2 or significantly lower than 1/2 within or between the lineages of interest - otherwise genes with low foldchanges might still get high p-values. The output still contains all genes, so I can still use it for GO-terms.
+
+```{r}
+#| label: chunk-xx-startvsend-test
+
+res_svse <- startVsEndTest(sce_tradeseq, l2fc = log2(2), lineages = TRUE)
+
+printable_lin1 <- printable_results(res_svse, test = "startvsend", lineage = 1)
+printable_results_lin1
+printable_results_lin2 <- printable_results(res_svse, test = "startvsend", lineage = 2)
+printable_results_lin2
+printable_results_lin3 <- printable_results(res_svse, test = "startvsend", lineage = 3)
+printable_results_lin3
+
+```
+
+diffEndTest compares lineages and tests whether they end at different expression levels. Somewhat nice, but depends; it might just be testing different 'clusters'. There also is a function diffStartTest, but all trajectories start from the same point, so that does not have much use
+
+```{r}
+#| label: chunk-xx-diffend-test
+# Do I want this one?
+res_end <- diffEndTest(sce_tradeseq)
+res_end
+
+```
+
+patternTest tests whether lineages follow different shapes.
+Same l2fc reasoning as with StartVsEndTest()
+
+```{r}
+#| label: chunk-xx-pattern-test
+
+res_pat <- patternTest(sce_tradeseq, l2fc = log2(2))
+
+printable_pat <- printable_results(res_pat, test = "pattern")
+printable_pat
+
+```
+
+
+Optionally: combining pattern test with diffEnd as done in the tradeseq vignette
+
+Once run, plot:
+-top results with kable
+- plot interesting genes (top 10 or so of each table) with plotSmoothers
+- plot genes which are interesting from that on PCA/UMAP on Seurat
+
+
++ I can also do GO-terms quite easily: in script 02_clustering.qmd, and I previously did this with tradeSeq results as well - the code needs to be tweaked a little but I can do that quite easily here as well. Should I do that for all statistical tests?
+
+
+# Session info
+
+I used the conda environment `[env_name]` to run this script. You can find major package versions in the file `/environments/[env_name].yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+
+```{r}
+#| label: chunk-99-sessioninfo
+sessionInfo()
+```
