@@ -41,3 +41,4 @@ dependencies:
 # For using quarto
 - r-knitr
 - quarto
+- r-reticulate
