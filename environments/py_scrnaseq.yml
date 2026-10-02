@@ -5,3 +5,6 @@ channels:
 dependencies:
 - python=3.12
 - sccoda=0.1.9
+# Some sccoda dependecies are not installed correctly, so install manually:
+- tf-keras # sccoda dependency which is not installed at all
+- arviz=0.23.4 # needs to be < 1.0.0
