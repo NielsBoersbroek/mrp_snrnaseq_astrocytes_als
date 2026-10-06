@@ -145,8 +145,9 @@ A live ggplot object carries its underlying data along with it — for plots bui
 
 ```{r}
 #| label: chunk-05-helper-save-plot
-save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE) {
+#| # For this script, set default legend position to right!
+save_plot <- function(p, filename, width = 10, height = 6, figure = NULL, 
+                      grob = TRUE, legend_position_rds = "right") {
   ## Save image on disk as png and pdf
   p_image <- p + theme_quarto() # Add Quarto-specific theme
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
@@ -156,7 +157,12 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
-    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    # Extract last letter to be the tag
+    tag <- str_extract(figure, "[A-Z]$")
+    p_rds <- p + 
+      labs(tag = tag) +
+      # Add manuscript-specific theme
+      theme_manuscript(legend_position = legend_position_rds) 
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
@@ -175,7 +181,6 @@ I created my own themes to add to figures. `theme_quarto()` is used to add theme
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "none") {
-  theme_classic() +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position
@@ -184,7 +189,6 @@ theme_quarto <- function(legend_position = "none") {
 
 theme_manuscript <- function(base_size = 8, legend_position = "none",
                          axis_text_size = 6, tag_text_size = 14) {
-  theme_classic(base_size = base_size) +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position,
@@ -320,6 +324,7 @@ plot_pseudotime <- function(pseudotime_list, pseudotime_avg = FALSE) {
         linewidth = 1.25,
         colour = "black"
         )
+    p_pseudo <- p_pseudo + theme_classic()
   } else {
     p_pseudo <- ggplot() +
       geom_point(
@@ -341,6 +346,13 @@ plot_pseudotime <- function(pseudotime_list, pseudotime_avg = FALSE) {
         colour = "black"
         ) +
       facet_wrap(~Lineage)
+    # Add theme_classic now, otherwise later use overwrites the strip theme
+    p_pseudo <- p_pseudo + theme_classic() +
+         theme(
+          panel.border = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(face = "bold")
+          )
   }
   p_pseudo
 }
@@ -366,6 +378,12 @@ plot_pseudotime_by <- function(pseudotime_list, variable = "AnonymousID") {
     scale_y_discrete(expand = c(0, 0)) + # Otherwise weird whitespace left
     scale_x_continuous(expand = c(0, 0)) +
     facet_wrap(~Lineage, scales = "free_x")
+  p_ridge <- p_ridge + theme_classic()  +
+    theme(
+      panel.border = element_blank(),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold")
+      )
   p_ridge
 }
 ```
@@ -424,8 +442,7 @@ Save the sce with slingshot results on disk in the folder `data/processed`. Trad
 ```{r}
 #| label: chunk-16-save-slingshot
 
-file_rds <-  paste0("sce_shortread_astros_slingshot.rds")
-file_rds <- file.path(dir_data, file_rds)
+file_rds <- file.path(dir_data, "sce_shortread_astros_slingshot.rds")
 saveRDS(sce, file_rds)
 ```
 
@@ -452,13 +469,16 @@ pseudotime_list_umap <- parse_slingshot(
 
 ```{r}
 #| label: fig-01-harm-per-lineage
-p_pseu_harm <- plot_pseudotime(pseudotime_list_harm)
-p_pseu_harm
+p_pseu_harm <- plot_pseudotime(pseudotime_list_harm) +
+  labs(x = "PC1", y = "PC2")
+p_pseu_harm + theme_manuscript()
 
 ```
+
 ```{r}
 #| label: fig-02-harm-average
-p_pseu_harm_avg <- plot_pseudotime(pseudotime_list_harm, pseudotime_avg = TRUE)
+p_pseu_harm_avg <- plot_pseudotime(pseudotime_list_harm, pseudotime_avg = TRUE)  +
+  labs(x = "PC1", y = "PC2")
 p_pseu_harm_avg
 
 ```
@@ -466,15 +486,26 @@ p_pseu_harm_avg
 
 ```{r}
 #| label: fig-03-umap-per-lineage
-p_pseu_umap <- plot_pseudotime(pseudotime_list_umap)
+p_pseu_umap <- plot_pseudotime(pseudotime_list_umap) +
+  labs(x = "UMAP1", y = "UMAP2")
 p_pseu_umap
 
 ```
 
 ```{r}
 #| label: fig-04-umap-average
-p_pseu_umap_avg <- plot_pseudotime(pseudotime_list_umap, pseudotime_avg = TRUE)
+p_pseu_umap_avg <- plot_pseudotime(pseudotime_list_umap, pseudotime_avg = TRUE)  +
+  labs(x = "UMAP1", y = "UMAP2")
 p_pseu_umap_avg
+
+```
+
+```{r}
+#| label: chunk-xx-save-plots-pseudotime
+save_plot(p_pseu_harm, "pseudotime_harmony_ind", figure = "F5A")
+save_plot(p_pseu_harm_avg, "pseudotime_harmony_avg", figure = "F5B")
+save_plot(p_pseu_umap, "pseudotime_umap_ind", figure = "F5C")
+save_plot(p_pseu_umap_avg, "pseudotime_umap_avg", figure = "F5D")
 
 ```
 

@@ -40,7 +40,7 @@ This script was run with the *conda environment* `r_scrnaseq_core`.
 # Moreover, I use knitr::current_input(), but that does not work as an
 # interactive session on the RStudio server does not involve any knitting
 
-setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
 
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
@@ -128,8 +128,8 @@ A live ggplot object carries its underlying data along with it — for plots bui
 
 ```{r}
 #| label: chunk-05-helper-save-plot
-save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE) {
+save_plot <- function(p, filename, width = 10, height = 6, figure = NULL, 
+                      grob = TRUE, legend_position_rds = "none") {
   ## Save image on disk as png and pdf
   p_image <- p + theme_quarto() # Add Quarto-specific theme
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
@@ -139,7 +139,12 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
-    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    # Extract last letter to be the tag
+    tag <- str_extract(figure, "[A-Z]$")
+    p_rds <- p + 
+      labs(tag = tag) +
+      # Add manuscript-specific theme
+      theme_manuscript(legend_position = legend_position_rds) 
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
@@ -159,16 +164,14 @@ I created my own themes to add to figures. `theme_quarto()` is used to add theme
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "right") {
-  theme_classic() +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position
     )
 }
 
-theme_manuscript <- function(base_size = 8, legend_position = "none",
-                         axis_text_size = 6, tag_text_size = 14) {
-  theme_classic(base_size = base_size) +
+theme_manuscript <- function(legend_position = "none", axis_text_size = 6, 
+                             tag_text_size = 14) {
     theme(
       plot.title = element_blank(),
       legend.position = legend_position,
@@ -224,14 +227,10 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE,
   p_bar <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
     geom_bar(position = freq_type, stat = "identity")
 
-  # Apply either theme_manuscript() or theme_quarto()
-  if (theme_manuscript) {
-    p_bar <- p_bar + theme_manuscript()
-  } else {
-    p_bar <- p_bar + theme_quarto()
-  }
   # Rotate x-axis labels, otherwise the x-axis becomes unreadable 
-  p_bar <- p_bar + theme(axis.text.x = element_text(angle = 90)) 
+  p_bar <- p_bar + 
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90)) 
 
   if (just_astro) {
     p_bar <- p_bar + scale_fill_manual(values = c("#EF2400", "grey"))
@@ -258,8 +257,14 @@ seu
 ```
 The metadata can be structured a little better, so I'll do that now, and then it's changed for the rest of the scripts.
 
+Some ugliness in the metadata, I'm fixing it here, in the root.
+- In the column pTDP-43 stage, all controls and samples ALS17 and ALS18 are empty. For the controls, that's because they do not have ALS and no pTDP-43 pathology, but samples ALS17 and ALS 18 are empty because they have FUS ALS - which has a different pathology.
+- Only one sample has pTDP-43 stage 2, so I lumped it together with 3 - otherwise comparison with stage 2 always looks weird, because it has n = 1.
+- The controls have empty strings in the column `primary_site_of_onset`, set these to `"Ctrl"`.
+- There was not yet a column with `ALS` vs `Ctrl`, so I added the column `condition`.
+
 ```{r}
-#| label:chunk-10-fix-metadata
+#| label: chunk-10-fix-metadata
 metadata <- seu@meta.data
 
 # How to fix the metadata of pTDP-43 stage and other columns
@@ -306,8 +311,10 @@ p_allen_subclass <- DimPlot(
   reduction = "umap",
   group.by = "predicted.id_coarse_allen_subclass",
   label = TRUE,
-  repel = TRUE
-)
+  repel = TRUE,
+  label.size = 1.5
+) + labs(x = "UMAP1", y = "UMAP2") +
+  theme(axis.title = element_text(size = 8))
 p_allen_subclass + theme_quarto(legend_position = "none")
 ```
 
@@ -352,7 +359,7 @@ p_feature + theme_quarto()
 #| label: chunk-11-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
-save_plot(p_feature, "allcelltypes_featureplot", figure = "F3B")
+save_plot(p_feature, "allcelltypes_featureplot")
 ```
 
 ## Visualization astrocyte frequency
@@ -387,25 +394,34 @@ kable(head(freq_table))
 #| label: fig-04-absolute-freq
 #| fig-cap: "Absolute frequency of cell types"
 p_abs <- bar_freq(freq_table, "stack")
-p_abs
+p_abs + theme_quarto()
 ```
 
 ```{r}
 #| label: fig-05-proportional-freq
 #| fig-cap: "Proportional frequency of cell types"
-p_prop <- bar_freq(freq_table, "fill")
-p_prop
+#| # This ones a little fancier atm because it's in the manuscript
+p_prop <- bar_freq(freq_table, "fill") +
+  labs(y = "Proportion") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.title = element_blank()
+    ) +
+  guides(fill = guide_legend(ncol = 1))  +
+  theme(
+    legend.key.size = unit(0.2, "cm"), 
+    legend.text = element_text(size = 6)
+    )
+p_prop + theme_quarto()
 ```
 
 ```{r}
 #| label: chunk-13-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
-# I need to run bar_freq() again, but this time with theme_manuscript
-p_abs <- bar_freq(freq_table, "stack", theme_manuscript = TRUE)
-p_prop <- bar_freq(freq_table, "fill", theme_manuscript = TRUE)
-save_plot(p_abs, "allcelltypes_barplot_abs", figure = "F3C")
-save_plot(p_prop, "allcelltypes_barplot_prop", figure = "F3D")
+save_plot(p_abs, "allcelltypes_barplot_abs")
+save_plot(p_prop, "allcelltypes_barplot_prop", figure = "F3B", 
+          legend_position_rds = "right")
 ```
 
 
