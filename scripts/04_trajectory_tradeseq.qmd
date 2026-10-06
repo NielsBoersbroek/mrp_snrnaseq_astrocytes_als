@@ -68,8 +68,13 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 #| label: chunk-02-packages
 
 library(tidyverse)
+library(patchwork)
 library(slingshot)
 library(tradeSeq)
+library(Seurat)
+library(msigdbr)
+library(fgsea)
+library(raster)
 library(here)
 library(knitr)
 
@@ -107,12 +112,19 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
 
-filter_min_pt selects the threshold for the percentage of cells a gene must be expressed in to be included for fitGAM(). Deliberately set high as fitGAM has a high computing time
+filter_min_pt selects the threshold for the percentage of cells a gene must be expressed in to be included for fitGAM(). Deliberately set high (at 10%) as fitGAM has a high computing time and takes up a lot of memory (it didn't make it with 128GB if I set it at 5%)
 
 ```{r}
 #| label: chunk-04-defining-variables
 
-filter_min_pt <- 5
+filter_min_pt <- 10
+# I want to inspect many genes
+n_topgenes_to_plot <- 20
+
+# Decide how many plots you want to make for the upregulated and downregulated
+# genes for the gsea
+number_of_top_pathways_down <- 10
+number_of_top_pathways_up <- 10
 ```
 
 ## Helper functions
@@ -132,7 +144,9 @@ A live ggplot object carries its underlying data along with it — for plots bui
 ```{r}
 #| label: chunk-05-helper-save-plot
 save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE) {
+                      figure = NULL, grob = TRUE, theme_manuscript = TRUE,
+                      patchwork = FALSE, legend_position_rds = "none",
+                      tag = TRUE) {
   ## Save image on disk as png and pdf
   p_image <- p + theme_quarto() # Add Quarto-specific theme
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
@@ -142,14 +156,26 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
-    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    if (tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag)
+    }
+    if (theme_manuscript) {
+      p <- p + 
+        theme_manuscript(legend_position = legend_position_rds)
+    }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p_rds <- ggplotGrob(p_rds)
+      if (patchwork) {
+        p <- patchworkGrob(p)
+      } else {
+        p <- ggplotGrob(p)
+      }
     }
     # Save on disk
-    saveRDS(p_rds, file_rds)
+    saveRDS(p, file_rds)
   }
 }
 ```
@@ -161,19 +187,19 @@ I created my own themes to add to figures. `theme_quarto()` is used to add theme
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "none") {
-  theme_classic() +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position
     )
 }
 
-theme_manuscript <- function(base_size = 8, legend_position = "none",
+theme_manuscript <- function(legend_position = "none",
+                             axis_title_size = 4, title_size = 8,
                          axis_text_size = 6, tag_text_size = 14) {
-  theme_classic(base_size = base_size) +
     theme(
-      plot.title = element_blank(),
+      plot.title = element_text(size = title_size),
       legend.position = legend_position,
+      axis.title = element_text(size = axis_title_size),
       axis.text = element_text(size = axis_text_size),
       plot.tag = element_text(
         face = "bold", 
@@ -191,6 +217,8 @@ For each test I'll run with tradeSeq, I'll want to perform multiple tests and pr
 
 tradeSeq does not automatically adjust p-values, so I do that for each.
 
+I sort by asbolute values, so I see both positive and negative fold changes
+
 I want all results automatically saved on disk, but there is the option to turn this off
 
 ```{r}
@@ -207,7 +235,7 @@ printable_results <- function(results, test = NULL, lineage = NULL,
   } else if (str_detect(test, regex("association", ignore_case = TRUE))) {
     results <- results |>
       filter(p_adj < 0.05) |>
-      arrange(desc(meanLogFC))
+      arrange(desc(abs(meanLogFC)))
   } else if (str_detect(test, regex("startVsEnd", ignore_case = TRUE))) {
     if (is.null(lineage)) {
       stop("You did not provide a lineage!")
@@ -224,15 +252,15 @@ printable_results <- function(results, test = NULL, lineage = NULL,
       # Then extract results of given lineage
       lineage <- as.character(lineage)
       results <- results |>
-        select(ends_with(lineage)) |>
+        select(gene, ends_with(lineage)) |>
         # !!sym(paste0()) makes it work without hardcoding the lineage
         filter(!!sym(paste0("adj_pvalue_lineage", lineage)) < 0.05) |>
-        arrange(!!sym(paste0("logFClineage", lineage)))
+        arrange(desc(abs(!!sym(paste0("logFClineage", lineage)))))
     } 
   } else if (str_detect(test, regex("pattern", ignore_case = TRUE))) {
     results <- results |>
       filter(p_adj < 0.05) |>
-      arrange(desc(fcMedian))
+      arrange(desc(abs(fcMedian)))
   }
   
   # Save the results to disk as csv.
@@ -252,6 +280,150 @@ printable_results <- function(results, test = NULL, lineage = NULL,
 
 ```
 
+### plot_topgenes()
+
+Two options as input for genes:
+1. output of `printable_results()` as input
+2. a manual list of genes
+Choose the option with `printable_results_input = TRUE/FALSE`
+
+You also need to provide an sce and counts object for PlotSmoothers and a Seurat object for the feature plots
+
+```{r}
+#| label: chunk-xx-helper-plot-topgenes
+plot_topgenes <- function(gene_input, sce = NULL, counts = NULL, 
+                          seu = NULL, n_genes = 10, ncol = 5, linewidth = 0.4,
+                          printable_results_input = TRUE) {
+  if (is.null(sce) | is.null(counts) | is.null(seu)) {
+    stop("You did not provide an sce, counts and/or Seurat object")
+  }
+  
+  if (printable_results_input) {
+    genes <- printable_results |>
+      slice_head(n = n_genes) |>
+      pull(gene)
+  } else {
+    genes <- gene_input
+  }
+
+  
+  # Create smoothers plot
+  plot_list <- list()
+  for (gene in genes) {
+    p_smooth <- plotSmoothers(
+      sce, 
+      counts, 
+      gene = gene,
+      alpha = 0.1, size = 0.5, lwd = linewidth
+      ) +
+      labs(title = gene)
+     plot_list[[gene]] <- p_smooth
+  }
+  p_smoothers <- wrap_plots(
+    plot_list, 
+    ncol = ncol, 
+    guides = "collect", axes = "collect"
+    )
+  
+  # Create Featureplots on both PCA and UMAP
+  p_pca <- FeaturePlot(
+    seu, 
+    reduction = "pca", 
+    features = genes, 
+    ncol = ncol
+    )  +
+    plot_layout(axes = "collect") &
+    NoLegend() 
+  p_umap <- FeaturePlot(
+    seu, 
+    reduction = "umap", 
+    features = genes, 
+    ncol = ncol
+    ) +
+    plot_layout(axes = "collect") &
+    NoLegend()
+  
+  output_list <- list(
+    "smoothers" = p_smoothers,
+    "feature_pca" = p_pca,
+    "feature_umap" = p_umap
+  )
+  
+  output_list
+}
+```
+
+### prepare_gsea() and gsea_pathway_selection
+
+`prepare_gsea()` prepares for `fgsea()` by creating a gene ranking. I will only run gsea on the results of `startVsEndTest()`. I defined this function in a previous script (02_clustering.qmd) as well, but there, I used it to run GO-term enrichment on the output of FindMarkers(), so it looks a little different there as it had a different input. The logic is the same.
+
+Two ways to sort: 
+- `logfc`: directly by logfc
+- `signed_logp`: -log10(p-value), with the sign (+/-) of the logFC
+
+`gsea_pathway_selection()` is a quick little function which extracts the most upregulated and downregulated pathways of a FGSEA results table, mostly for visualization. The numbers for upregulated and downregulated pathways are defined in the "Define variables" section. This function as used previously
+
+```{r}
+#| label: chunk-xx-helper-prepare-gsea
+
+prepare_gsea <- function(results, lineage, sort = "logfc") {
+  # Then extract results of given lineage
+  lineage <- as.character(lineage)
+  # Set columnames without the lineage number, so the rest of the code does
+  # not have to bother with that anymore
+  results <- results |>
+    rownames_to_column(var = "gene") |>
+    select(
+      gene,
+      waldStat = paste0("waldStat_lineage", lineage),
+      df = paste0("df_lineage", lineage),
+      pvalue = paste0("pvalue_lineage", lineage),
+      logFC = paste0("logFClineage", lineage)
+      )
+  
+  # Sort genes based on selected sorting method
+  if (sort != "logfc" & sort != "signed_logp") {
+    stop("You did not select a valid sorting method")
+  } else if (sort == "logfc") {
+    # Rank by logFC
+    results <- results |>
+      # tradeseq can produce inf logFCs, fgsea can't handle those
+      filter(is.finite(logFC)) |> 
+      arrange(desc(logFC)) 
+    # Extract a named vector of the ranked genes
+    gene_scores <- results$logFC
+    names(gene_scores) <- results$gene
+  } else if (sort == "signed_logp") {
+    results <- results |>
+      mutate(
+      rankings = sign(logFC)*(-log10(pvalue)),
+      rankings = case_when(
+        rankings == Inf ~ 16.5, # a little higher than maximum value
+        rankings == -Inf ~ -16.5,
+        .default = rankings
+        )
+      ) |>
+      arrange(desc(rankings))
+    # Extract a named vector of the ranked genes
+    gene_scores <- results$rankings
+    names(gene_scores) <- results$gene
+  }
+  gene_scores
+}
+
+gsea_pathway_selection <- function(gsea_results, n_up = 10, n_down = 0) {
+  top_pathways_up <- gsea_results |> 
+    filter(padj < 0.05) |>  
+    slice_max(NES, n = n_up) |>
+    pull(pathway)
+  top_pathways_down <- gsea_results |>
+    filter(padj < 0.05) |>
+    slice_min(NES, n = n_down) |>
+    pull(pathway)
+  top_pathways <- c(top_pathways_up, rev(top_pathways_down))
+  top_pathways
+}
+```
 
 <!-- [Add any additional, script-specific helper functions here as their own
 ### function_name() subsection, following the same pattern as save_plot() above.
@@ -292,31 +464,9 @@ genes_keep <- rownames(sce)[expressed_in_cells_pt >= filter_min_pt]
 # Might not be the most straight-forward way, but I prefer using dplyr
 genes_keep <- genes_keep |>
   as_tibble() |>
-  filter(!str_detect(value, "ENSG")) |>
+  filter(!str_detect(value, "^ENSG")) |>
   pull(value)
 length(genes_keep)
-
-```
-
-```{r}
-#| label: chunk-extra-test-run
-# For the test run, randomly select 500 genes
-# Set seed so that I can compare multiple runs
-set.seed(1234)
-genes_keep <- sample(genes_keep, size = 500)
-# Filename for test run:
-file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq_test.rds")
-
-# Print time to see how long it took
-Sys.time()
-
-```
-
-```{r}
-#| label: chunk-extra-test-run-2
-#| eval: true
-# Print time to see how long it took
-Sys.time()
 
 ```
 
@@ -324,7 +474,6 @@ This is very computationally heavy; only run it if it has not yet been run befor
 
 ```{r}
 #| label: chunk-09-run-fitgam
-# Uncomment line below when not performing test_run
 file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq.rds")
 if(file.exists(file_rds)) {
   # If it already exists, just open from disk
@@ -353,26 +502,17 @@ if(file.exists(file_rds)) {
 
 ```
 
-```{r}
-#| label: chunk-extra-test-run-2
-#| eval: true
-# Print time to see how long it took
-Sys.time()
-
-```
-
 # Statistical tests
 
+For some of these visualizations, I'll use Seurat, so open the Seurat object
+
 ```{r}
-#| label: chunk-extra-load-test-result
-#| eval: false
-
-# I have not ran the actual results yet, but can open my test runs to check
-# whether the tests work
- file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq_res0.4_test500genes_2workers.rds")
-sce_tradeseq <- readRDS(file_rds)
-
+#| label: chunk-xx-open-seurat
+file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
+seu <- readRDS(file_rds)
 ```
+
+## associationTest()
 
 Associationtest finds genes which have general associations with lineages. These are not yet gene-specific.
 
@@ -381,8 +521,36 @@ Associationtest finds genes which have general associations with lineages. These
 res_asso <- associationTest(sce_tradeseq)
 
 printable_asso <- printable_results(res_asso, test = "association")
-printable_asso
+kable(head(printable_asso, 10))
 ```
+
+Create visualizations using my plot_topgenes() function
+
+```{r}
+#| label: fig-xx-association-test-top-smoothers
+plots_asso <- plot_topgenes(
+  printable_asso,
+  sce_tradeseq, counts, seu,
+  n_genes = n_topgenes_to_plot
+  )
+
+p_smoothers <- plots_asso$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-association-test-top-pca
+p_pca <- plots_asso$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-association-test-top-umap
+p_umap <- plots_asso$feature_umap
+p_umap
+```
+
+## startVsEndTest()
 
 StartVsEndTest tests which genes go up/dowm from start to end per lineage. This is probably the most important one, as I actually get lineage specifics here.
 
@@ -394,23 +562,165 @@ I set threshold at log(2). This tests which genes have a fold change that is sig
 res_svse <- startVsEndTest(sce_tradeseq, l2fc = log2(2), lineages = TRUE)
 
 printable_lin1 <- printable_results(res_svse, test = "startvsend", lineage = 1)
-printable_results_lin1
-printable_results_lin2 <- printable_results(res_svse, test = "startvsend", lineage = 2)
-printable_results_lin2
-printable_results_lin3 <- printable_results(res_svse, test = "startvsend", lineage = 3)
-printable_results_lin3
+printable_lin1
+printable_lin2 <- printable_results(res_svse, test = "startvsend", lineage = 2)
+printable_lin2
+printable_lin3 <- printable_results(res_svse, test = "startvsend", lineage = 3)
+printable_lin3
 
 ```
 
-diffEndTest compares lineages and tests whether they end at different expression levels. Somewhat nice, but depends; it might just be testing different 'clusters'. There also is a function diffStartTest, but all trajectories start from the same point, so that does not have much use
+For startVsEndTest(), I will also analyse trajectories with GO-term enrichment.
 
 ```{r}
-#| label: chunk-xx-diffend-test
-# Do I want this one?
-res_end <- diffEndTest(sce_tradeseq)
-res_end
+#| label: chunk-xx-go-terms
+# First load in the gene set using msigdbr::msigdbr()
+gs_go_bp <- msigdbr(
+  species = "Homo sapiens", 
+  collection = "C5", 
+  subcollection = "GO:BP"
+)
+# Adapt the gene set to the input required for fgsea: it needs to be a list 
+# with your pathways/gene set names and the genes that make up each pathway.
+gene_sets <- split(x = gs_go_bp$gene_symbol, f = gs_go_bp$gs_name)
+
+plots_gsea <- list()
+# Run fgsea for each lineage. Store results and plot
+for (lineage in 1:3) {
+  gene_scores <- prepare_gsea(
+    res_svse,
+    lineage = lineage,
+    sort = "logfc"
+    )
+  
+  gsea_res <- fgsea(
+    pathways = gene_sets, # List of gene sets to check
+    stats = gene_scores,
+    scoreType = 'std', # std as we have both pos and neg rankings
+    minSize = 10, # otherwise I only get pathways with 2-5 genes
+    maxSize = 500,
+  )
+  file_csv <- file.path(dir_tab, paste0("goterms_svse_lin", lineage, ".csv"))
+  # write_csv won't work for the last column, as it's a list column
+  gsea_res |>
+     mutate(leadingEdge = map_chr(leadingEdge, str_c, collapse = ";")) |>
+     write_csv(file_csv)
+  
+  ## Create a visualization
+  top_pathways <- gsea_pathway_selection(
+    gsea_res, 
+    n_up = number_of_top_pathways_up,
+    n_down = number_of_top_pathways_down
+    )
+  p_gsea <- plotGseaTable(
+    gene_sets[top_pathways], 
+    stats = gene_scores, 
+    fgseaRes = gsea_res, 
+    pathwayLabelStyle = list(size = 9),
+    gseaParam = 0.5 # Makes the figure clearer
+    )
+  plots_gsea[[lineage]] <- p_gsea
+}
 
 ```
+### Lineage 1
+
+```{r}
+#| label: fig-xx-start-vs-end-lin1-top-smoothers
+plots_svse1 <- plot_topgenes(
+  printable_lin1,
+  sce_tradeseq, counts, seu,
+  n_genes = n_topgenes_to_plot
+  )
+
+p_smoothers <- plots_svse1$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin1-top-pca
+p_pca <- plots_svse1$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin1-top-umap
+p_umap <- plots_svse1$feature_umap
+p_umap
+```
+
+
+```{r}
+#| label: fig-xx-go-terms-lin1
+
+plots_gsea[[1]]
+```
+
+### Lineage 2
+
+```{r}
+#| label: fig-xx-start-vs-end-lin2-top-smoothers
+plots_svse2 <- plot_topgenes(
+  printable_lin2,
+  sce_tradeseq, counts, seu,
+  n_genes = n_topgenes_to_plot
+  )
+
+p_smoothers <- plots_svse2$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin2-top-pca
+p_pca <- plots_svse2$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin2-top-umap
+p_umap <- plots_svse2$feature_umap
+p_umap
+```
+
+```{r}
+#| label: fig-xx-go-terms-lin2
+
+plots_gsea[[2]]
+```
+
+### Lineage 3
+
+```{r}
+#| label: fig-xx-start-vs-end-lin3-top-smoothers
+plots_svse3 <- plot_topgenes(
+  printable_lin3,
+  sce_tradeseq, counts, seu,
+  n_genes = n_topgenes_to_plot
+  )
+
+p_smoothers <- plots_svse3$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin3-top-pca
+p_pca <- plots_svse3$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-start-vs-end-lin3-top-umap
+p_umap <- plots_svse3$feature_umap
+p_umap
+```
+
+```{r}
+#| label: fig-xx-go-terms-lin3
+
+plots_gsea[[3]]
+```
+
+## patternTest()
 
 patternTest tests whether lineages follow different shapes.
 Same l2fc reasoning as with StartVsEndTest()
@@ -424,17 +734,183 @@ printable_pat <- printable_results(res_pat, test = "pattern")
 printable_pat
 
 ```
+```{r}
+#| label: fig-xx-pattern-test-top-smoothers
+plots_pat <- plot_topgenes(
+  printable_pat,
+  sce_tradeseq, counts, seu,
+  n_genes = n_topgenes_to_plot
+  )
+
+p_smoothers <- plots_pat$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-pattern-test-top-pca
+p_pca <- plots_pat$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-pattern-test-top-umap
+p_umap <- plots_pat$feature_umap
+p_umap
+```
+
+## predictSmooth()
+
+```{r}
+#| label: fig-xx-predict-smooth
+
+library(ComplexHeatmap)
+library(circlize)
+
+# 1. Gene selection: top N per lineage, union across lineages
+n_heat <- 30
+genes_heat <- list(printable_lin1, printable_lin2, printable_lin3) |>
+  map(\(x) x |> slice_head(n = n_heat) |> pull(gene)) |>
+  unlist() |>
+  unique()
+
+# 2. Smoothed expression: matrix of genes x (lineage * nPoints)
+smooth_mat <- predictSmooth(
+  sce_tradeseq,
+  gene = genes_heat,
+  nPoints = 100,
+  tidy = FALSE
+)
+colnames(smooth_mat)[1:3]  # check how the columns are named
+
+# 3. log-transform and z-score per gene, jointly across all lineages
+#    so that levels are comparable between lineages
+smooth_z <- smooth_mat |>
+  log1p() |>
+  t() |> scale() |> t()
+
+# 4. Column annotation: which lineage each column belongs to
+lineage_cols <- str_extract(colnames(smooth_z), "^lineage\\d+")
+
+ht <- Heatmap(
+  smooth_z,
+  name = "z-score",
+  col = colorRamp2(c(-2, 0, 2), c("navy", "white", "firebrick")),
+  cluster_columns = FALSE,               # columns are ordered by pseudotime
+  column_split = lineage_cols,
+  show_column_names = FALSE,
+  cluster_rows = TRUE,
+  show_row_names = TRUE,
+  row_names_gp = grid::gpar(fontsize = 6),
+  column_title_gp = grid::gpar(fontsize = 10)
+)
+ht
+```
+
+## Known markers
+
+```{r}
+#| label: fig-xx-known-markers-smooth
+genes_rea <- c("C3", "SERPING1", "CHI3L1", "OSMR", "HSPB1", "PRDX6", "VIM", "CRYAB")
+
+plots_mark <- plot_topgenes(
+  genes_rea,
+  sce_tradeseq, counts, seu,
+  printable_results_input = FALSE,
+  ncol_smoothers = 4
+  )
+
+p_smoothers <- plots_mark$smoothers
+p_smoothers
+```
+
+```{r}
+#| label: fig-xx-pattern-test-top-pca
+p_pca <- plots_mark$feature_pca
+p_pca
+```
+
+```{r}
+#| label: fig-xx-pattern-test-top-umap
+p_umap <- plots_mark$feature_umap
+p_umap
+```
 
 
-Optionally: combining pattern test with diffEnd as done in the tradeseq vignette
+```{r}
+#| label: chunk-xx-figures-for-manuscript
 
-Once run, plot:
--top results with kable
-- plot interesting genes (top 10 or so of each table) with plotSmoothers
-- plot genes which are interesting from that on PCA/UMAP on Seurat
+# GPC5 and HPSE2 are a little special, because I'm also plotting the UMAP
+
+p_smooth_gpc5 <- plotSmoothers(
+      sce_tradeseq, counts, 
+      alpha = 0.1, size = 0.5, lwd = 0.8,
+      gene = "GPC5"
+    ) +
+  labs(title = "GPC5") +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+# Don't add theme_manuscript in save_plot, as this one should not have a label
+p_umap_gpc5 <- FeaturePlot(seu, features = "GPC5", reduction = "umap", raster = TRUE) +
+  theme_manuscript()
 
 
-+ I can also do GO-terms quite easily: in script 02_clustering.qmd, and I previously did this with tradeSeq results as well - the code needs to be tweaked a little but I can do that quite easily here as well. Should I do that for all statistical tests?
+p_smooth_hpse2 <- plotSmoothers(
+      sce_tradeseq, counts, 
+      alpha = 0.1, size = 0.5, lwd = 0.8,
+      gene = "HPSE2"
+    ) +
+  labs(title = "HPSE2") +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+p_umap_hpse2 <- FeaturePlot(seu, features = "HPSE2", reduction = "umap", raster = TRUE) +
+  theme_manuscript()
+
+# Add a title to the smoothers of the other two
+p_c3 <- plotSmoothers(
+      sce_tradeseq, counts, 
+      alpha = 0.1, size = 0.5, lwd = 0.8,
+      gene = "C3",
+    ) +
+      labs(title = "C3")  +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+p_vim <- plotSmoothers(
+      sce_tradeseq, counts, 
+      alpha = 0.1, size = 0.5, lwd = 0.8,
+      gene = "VIM",
+    ) +
+      labs(title = "VIM")  +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# Save to disk
+save_plot(p_smooth_gpc5, "tradeseq_gpc5_smooth", figure = "F5E")
+save_plot(p_umap_gpc5, "tradeseq_gpc5_umap", figure = "F5E_umap", tag = FALSE,
+          raster = TRUE)
+save_plot(p_smooth_hpse2, "tradeseq_hpse2_smooth", figure = "F5F")
+save_plot(p_umap_hpse2, "tradeseq_hpse2_umap", figure = "F5F_umap", tag = FALSE,
+          raster = TRUE)
+save_plot(p_c3, "tradeseq_c3", figure = "F5G", legend_position_rds = "right")
+save_plot(p_vim, "tradeseq_vim", figure = "F5H", legend_position_rds = "right")
+
+```
+
+```{r}
+#| label: chunk-xx-figures-for-manuscript-old
+# This was before I added the UMAPs
+genes_man <- c("HPSE2", "GPC5", "C3", "VIM")
+
+plots_man <- plot_topgenes(
+  genes_man,
+  sce_tradeseq, counts, seu,
+  printable_results_input = FALSE,
+  ncol = 4, 
+  linewidth = 0.8
+  )
+
+p_smoothers <- plots_man$smoothers
+p_smoothers
+
+```
+
+```
+
 
 
 # Session info
