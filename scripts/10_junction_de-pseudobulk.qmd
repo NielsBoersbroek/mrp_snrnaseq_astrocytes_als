@@ -1,0 +1,966 @@
+---
+title: "Junction differential expression ALS vs control (pseudobulk)"
+author: "Niels Boersbroek"
+date: "October 5, 2026"
+format: 
+  html:
+    toc: true
+    theme: materia
+    embed-resources: true
+---
+
+# Junction differential expression ALS vs control (pseudobulk)
+
+<!-- TODO (Niels): this intro is a first draft, adapt it to your own words. -->
+
+In script 08 I created gene-specific junction Seurat objects of the astrocytes (normalised with TF-IDF). In this script I test which junctions of a gene differ between ALS patients and controls. Instead of treating every nucleus as an independent observation, I create a **pseudobulk** per donor: the raw junction counts of all astrocytes of a donor are summed, and the resulting donor-by-junction count matrix is tested with DESeq2 (design `~ condition`, with Ctrl as reference level). Script 09 tests differential expression between clusters instead.
+
+For every gene, the DESeq2 results are stored as a `.csv` (sorted by raw p-value). The results are visualised with an MA plot, a dotplot of the top junctions and violin plots per junction (counts and normalised data). The helper functions also contain the functions to draw an exon junction relative to a reference transcript, which I can use on the junctions I find interesting.
+
+```{r}
+#| label: chunk-01-setup
+#| include: false
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Preparation
+
+## Prerequisites
+
+This script was run with the *conda environment* `r_scrnaseq_core`.
+
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
+# TODO: check that this path is the path of this repo
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directories
+dir_raw <- file.path(dir_home, "data/raw")
+dir_data <- file.path(dir_home, "data/processed")
+dir_temp <- file.path(dir_home, "data/temporary")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "10_junction_de-pseudobulk"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/11_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+
+## Cache directory
+# For this script, I'm setting a cache directory; this is specific for the
+# ensembldb loading for the exon junction plots. AnnotationHub downloads the 
+# database to a cache folder. If I wouldn't manually set it, it would use the 
+# cache of my home directory instead ("/home/hers_en/nboersbroek"), which only 
+# has 7 GB space
+dir_cache <- file.path(dir_temp, "annotationhub_cache")
+dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
+```
+
+```{r}
+#| label: chunk-02-packages
+
+library(tidyverse)
+library(here)
+library(knitr)
+library(Seurat)
+library(scales)
+library(DESeq2)
+library(AnnotationHub)
+library(ensembldb)
+# These Bioconductor packages (AnnotationHub and ensembldb) contain functions
+# with the same name as several dplyr functions (select, filter, etc.), so I
+# needed to specify those with dplyr:: thoroughout this script
+
+```
+
+```{r}
+#| label: chunk-03-directories
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
+
+## Data directories
+dir_raw <- file.path(dir_home, "data/raw")
+dir_data <- file.path(dir_home, "data/processed")
+dir_temp <- file.path(dir_home, "data/temporary")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- knitr::current_input(dir = FALSE)
+folder_name <- str_remove(folder_name, "\\.\\w*$")
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/11_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+
+## Cache directory
+# For this script, I'm setting a cache directory; this is specific for the
+# ensembldb loading for the exon junction plots. AnnotationHub downloads the 
+# database to a cache folder. If I wouldn't manually set it, it would use the 
+# cache of my home directory instead ("/home/hers_en/nboersbroek"), which only 
+# has 7 GB space
+dir_cache <- file.path(dir_temp, "annotationhub_cache")
+dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+
+```{r}
+#| label: chunk-04-defining-variables
+# Genes of interest. The gene-specific objects were created in 08.
+genes <- c("GFAP", "ANXA11", "CRYAB")
+
+## Pseudobulk and DESeq2 -------------------------------------------------------
+
+# Metadata column with the sample (donor) identifier: one pseudobulk per sample
+sample_var <- "AnonymousID"
+# Metadata column with the condition to test
+condition_var <- "condition"
+# Reference level and the level which is tested against it
+ref_level <- "Ctrl"
+test_level <- "ALS"
+# Other sample-level columns to keep in the sample metadata. Gender is not in
+# the design (yet), but I might want to correct for it
+covariate_vars <- "Gender"
+
+## Visualisation ---------------------------------------------------------------
+
+# Number of top junctions (lowest raw p-value) shown in the dotplot, the table
+# and the violin plots
+n_top_junctions <- 6
+# Adjusted p-value threshold used for colouring in the MA plot
+alpha_ma <- 0.05
+
+## Exon junction plots ---------------------------------------------------------
+
+# Columns taken from the EnsDb exon table
+exon_columns <- c(
+  "gene_name",
+  "seq_name",         # the chromosome the gene is on, added as sanity check
+  "exon_id", 
+  "exon_seq_start", 
+  "exon_seq_end", 
+  "seq_strand",       # the strand which the gene is on
+  "tx_id",            # tx = transcript
+  "tx_name",          # more human-readable transcript name
+  "tx_is_canonical",
+  "tx_cds_seq_start", # start coordinate of coding region of the transcript
+  "tx_cds_seq_end",   # end coordinate of coding region of the transcript
+  "exon_idx"          # the exon's rank within its transcript (exon 1, 2, 3...)
+)
+
+# This is the latest reference in the ensembldb version I installed for Homo 
+# sapiens GRCh38
+ensdb_record <- "AH119325"
+
+# Reference transcript per gene. "canonical" is the default. For some genes the
+# canonical transcript gave a weird plot (two different tx_id/tx_name entries),
+# so I defined a transcript manually
+transcript_ref <- c(
+  ANXA11 = "ENST00000422982"
+)
+```
+
+## Helper functions
+
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
+### save_plot()
+
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure. You will not see saving of figures happening in this HTML output file, because I hid those chunks with `echo: false`.
+
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set `figure` to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+
+A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
+
+By default, `save_plot()` adds my themes (see below) to the plot. `theme_quarto()` hides the title and the legend and is a complete theme, so it would also overwrite custom `theme()` tweaks (rotated axis labels, a customised y-axis) that were added earlier. For plots which need a legend or custom theme elements, build the theme into the plot itself and set `apply_theme = FALSE`.
+
+```{r}
+#| label: chunk-05-helper-save-plot
+save_plot <- function(p, filename, width = 10, height = 6, 
+                      figure = NULL, grob = TRUE, apply_theme = TRUE) {
+  ## Save image on disk as png and pdf
+  # Add Quarto-specific theme, unless the plot has its own custom theme
+  p_image <- if (apply_theme) p + theme_quarto() else p
+  file_png <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(file_png, p_image, width = width, height = height, dpi = 150)
+  file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p_image, width = width, height = height, dpi = 150)
+  
+  ## Save the ggplot object on disk as an rds file 
+  if (!is.null(figure)) {
+    # Add manuscript-specific theme, unless the plot has its own custom theme
+    p_rds <- if (apply_theme) p + theme_manuscript() else p
+    file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+    # Convert the object to a grob if needed
+    if (grob) {
+      p_rds <- ggplotGrob(p_rds)
+    }
+    # Save on disk
+    saveRDS(p_rds, file_rds)
+  }
+}
+```
+
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+
+```{r}
+#| label: chunk-06-helper-themes
+theme_quarto <- function(legend_position = "none") {
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(legend_position = "none",
+                         axis_text_size = 6, tag_text_size = 14) {
+    theme(
+      plot.title = element_blank(),
+      legend.position = legend_position,
+      axis.text = element_text(size = axis_text_size),
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        )
+    )
+}
+
+```
+
+### print_tabset()
+
+Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with `print_tabset()`. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option `#| output: asis`. `heading_level` should be one deeper than the heading above the chunk.
+
+```{r}
+#| label: chunk-07-helper-print-tabset
+print_tabset <- function(obj_list, heading_level = 3) {
+  cat("::: {.panel-tabset}\n\n")
+  for (nm in names(obj_list)) {
+    cat(strrep("#", heading_level), " ", nm, "\n\n", sep = "")
+    obj <- obj_list[[nm]]
+    if (inherits(obj, "ggplot")) {
+      print(obj)
+    } else if (is.data.frame(obj)) {
+      cat(knitr::kable(obj, format = "pipe"), sep = "\n")
+    }
+    cat("\n\n")
+  }
+  cat(":::\n\n")
+}
+```
+
+### run_deseq_junction()
+
+This function runs the pseudobulk differential expression for one gene-specific Seurat object. It:
+
+1. creates pseudobulk from Seurat by  summing the raw counts per sample with `Seurrat::AggregateExpression()`;
+2. builds the sample metadata table which DESeq2 requires as input (one row per sample, with the number of cells per sample);
+3. checks that the columns of the count matrix and the rows of the metadata are in the same order. DESeq2 does **not** match them by name, it only assumes the order is the same, so this check is very important;
+4. runs DESeq2 with design `~ condition` and the reference level as control;
+5. returns the results sorted by raw p-value.
+
+```{r}
+#| label: chunk-08-helper-run-deseq-junction
+run_deseq_junction <- function(seu, sample_var, condition_var, ref_level,
+                               test_level, covariate_vars = NULL) {
+  ## 1. Pseudobulk: sum the raw counts of all cells of a sample
+  seu_bulk <- AggregateExpression(
+    seu,
+    return.seurat = TRUE,
+    assays = "RNA",
+    group.by = sample_var
+  )
+  # Turn sparse matrix to regular matrix, as DESeq2 requires a regular matrix)
+  bulk_counts <- as.matrix(GetAssayData(seu_bulk, layer = "counts"))
+  
+  ## 2. Sample metadata: one row per sample
+  meta <- seu@meta.data |>
+    dplyr::select(dplyr::all_of(c(sample_var, condition_var, covariate_vars))) |>
+    dplyr::distinct()
+  # Every sample should have exactly one value for each column. Otherwise, a
+  # column was not constant within a sample
+  stopifnot(!anyDuplicated(meta[[sample_var]]))
+  rownames(meta) <- meta[[sample_var]]
+  
+  # Number of cells per sample
+  meta$n_cells <- as.integer(table(seu@meta.data[[sample_var]])[rownames(meta)])
+  meta[[sample_var]] <- NULL
+  
+  ## 3. Make sure the order of counts columns and metadata rows is the same
+  stopifnot(all(rownames(meta) %in% colnames(bulk_counts)))
+  bulk_counts <- bulk_counts[, rownames(meta), drop = FALSE]
+  stopifnot(identical(colnames(bulk_counts), rownames(meta)))
+  
+  ## 4. Running DESeq2
+  dds <- DESeqDataSetFromMatrix(
+    countData = bulk_counts,
+    colData = meta,
+    design = reformulate(condition_var)
+  )
+  # Set the reference level
+  dds[[condition_var]] <- relevel(factor(dds[[condition_var]]), ref = ref_level)
+  
+  dds <- DESeq(dds)
+  
+  ## 5. Results, sorted by raw p-value. as.data.frame() and not as_tibble(),
+  # as the latter removes the rownames (the junctions).
+  res <- results(dds, contrast = c(condition_var, test_level, ref_level))
+  res_sorted <- res |>
+    as.data.frame() |>
+    rownames_to_column("junction") |>
+    arrange(pvalue)
+  
+  list(dds = dds, res = res, res_sorted = res_sorted, meta = meta)
+}
+```
+
+### plot_ma()
+
+DESeq2's `plotMA()` uses base R graphics, which is a bit annoying: my system saves ggplot objects to be turned into grobs for the manuscript. With `plot_ma()`, I created the the MA plot function with ggplot: the mean of normalised counts (`baseMean`, log scale) against the log2 fold change, with junctions below the adjusted p-value threshold highlighted. This works with `save_plot()` and can end up in a patchwork figure.
+
+```{r}
+#| label: chunk-09-helper-plot-ma
+plot_ma <- function(res, gene, alpha = 0.05) {
+  ma_df <- as.data.frame(res) |>
+    rownames_to_column("junction") |>
+    dplyr::filter(!is.na(baseMean), baseMean > 0, !is.na(log2FoldChange)) |>
+    mutate(significant = !is.na(padj) & padj < alpha)
+  
+  ggplot(ma_df, aes(x = baseMean, y = log2FoldChange, colour = significant)) +
+    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+    geom_point(size = 1.5, alpha = 0.7) +
+    scale_x_log10(labels = label_comma()) +
+    scale_colour_manual(
+      values = c("FALSE" = "grey60", "TRUE" = "#D7191C"),
+      name = paste0("padj < ", alpha)
+    ) +
+    labs(
+      title = paste0("MA plot: ", gene),
+      x = "Mean of normalised counts (baseMean)",
+      y = paste0("log2 fold change (", test_level, " vs ", ref_level, ")")
+    ) +
+    theme_classic()
+}
+```
+
+### Exon junction plot functions
+
+The functions below draw an exon junction relative to a reference transcript from the Ensembl database. They are used in the section on exon junction plots at the end of this document.
+
+<!-- NOTE: these functions are duplicated in 09 and 10. If you change one, change both (keep in sync). -->
+
+`get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble. (I used to paste this code every time I needed it.)
+
+```{r}
+#| label: chunk-14-helper-get-gene-exons
+get_gene_exons <- function(edb, gene, columns = exon_columns) {
+  exons(
+    edb,
+    columns = columns,
+    filter = GeneNameFilter(gene), 
+    return.type = "data.frame"
+  ) |> 
+    as_tibble()
+}
+```
+
+There's a small mismatch between my junctions and the EnsDb entries: my junction strings (`chr[name]:[pos1]:[pos2]`) store the first and last base of the *intron*, while the EnsDb exon table stores exon boundaries, which are one base further out (`exon_end = intron_start - 1`, `exon_start = intron_end + 1`). I found this by testing it empirically: acceptor `pos2 + 1` matched a catalogued exon start; donor `pos1 - 1` did not match any catalogued exon end. `parse_junction()` takes care of this.
+
+```{r}
+#| label: chunk-10-helper-parse-junction
+parse_junction <- function(junction) {
+  # Use RegEx to parse chromosome and positions
+  pattern <- "^(chr\\w+):(\\d+):(\\d+)" # might have ":-" at end, so don't use $
+  capture <- str_match(junction, pattern)
+  # Creates a matrix with columns: [,1] full match, [,2] chromosome, 
+  # [,3] pos1, [,4] pos2
+  
+  # Convert to tibble to easily use further on
+  tibble(
+    chromosome = capture[, 2],
+    pos1 = as.numeric(capture[, 3]) - 1,
+    pos2 = as.numeric(capture[, 4]) + 1
+  )
+}
+```
+
+`classify_junction()` determines whether the donor site, acceptor site and the *pair* of them are known in the gene's catalogued transcripts.
+
+```{r}
+#| label: chunk-11-helper-classify-junction
+classify_junction <- function(junction_ti, exons_gene) {
+  strand <- unique(exons_gene$seq_strand)
+  if (length(strand) != 1) {
+    stop("exons_gene spans more than one strand - check the gene filter")
+  }
+  
+  # Map (pos1, pos2) onto (donor, acceptor) depending on strand.
+  # Forward: transcript order == genomic order -> donor = pos1 (upstream
+  #   exon's end boundary), acceptor = pos2 (downstream exon's start boundary)
+  # Reverse: transcript order is flipped -> donor = pos2 (start boundary of
+  #   the exon that comes first in transcript order), acceptor = pos1 (end
+  #   boundary of the exon that comes second). See my paper sketch.
+  if (strand == 1) {
+    donor_pos <- junction_ti$pos1
+    acceptor_pos <- junction_ti$pos2
+    donor_col <- "exon_seq_end"
+    acceptor_col <- "exon_seq_start"
+  } else if (strand == -1) {
+    donor_pos <- junction_ti$pos2
+    acceptor_pos <- junction_ti$pos1
+    donor_col <- "exon_seq_start"
+    acceptor_col <- "exon_seq_end"
+  } else {
+    stop("Unexpected strand value: ", strand)
+  }
+  
+  donor_known    <- donor_pos %in% exons_gene[[donor_col]]
+  acceptor_known <- acceptor_pos %in% exons_gene[[acceptor_col]]
+  
+  # A known PAIR requires donor and acceptor to belong to two exons that are
+  # consecutive within the same transcript - not just two boundaries that
+  # each independently exist somewhere in the gene.
+  pair_known <- exons_gene |>
+    arrange(tx_id, exon_idx) |>
+    group_by(tx_id) |>
+    mutate(next_boundary = lead(.data[[acceptor_col]])) |>
+    ungroup() |>
+    dplyr::filter(.data[[donor_col]] == donor_pos, next_boundary == acceptor_pos) |>
+    nrow() > 0
+  
+  category <- case_when(
+    donor_known  & acceptor_known & pair_known  ~ "known pair",
+    donor_known  & acceptor_known & !pair_known ~ "novel pair, known sites",
+    donor_known  & !acceptor_known              ~ "novel acceptor",
+    !donor_known & acceptor_known               ~ "novel donor",
+    TRUE                                         ~ "totally novel pair"
+  )
+  
+  tibble(
+    donor = donor_pos, acceptor = acceptor_pos,
+    donor_known, acceptor_known, pair_known, category
+  )
+}
+```
+
+`reference_structure()` builds the coordinates of the exons, introns, UTRs and intron arrows of the reference transcript. By default this is the canonical transcript, but a transcript ID or name can be provided.
+
+```{r}
+#| label: chunk-12-helper-reference-structure
+reference_structure <- function(gene, exons_gene, transcript = "canonical",
+                                include_utr = TRUE) {
+  # The default reference structure is the canonical transcript, but users can
+  # also enter their own transcript (both as tx_id or tx_name)
+  if (transcript == "canonical") {
+    tx_selected <- exons_gene |>
+      dplyr::filter(tx_is_canonical == 1) |>
+      arrange(exon_seq_start) 
+  } else {
+    tx_selected <- exons_gene |>
+      dplyr::filter(tx_id == transcript | tx_name == transcript) |>
+      arrange(exon_seq_start)
+  }
+  
+  # Stop if the transcript entry was non-viable
+  if (nrow(tx_selected) == 0) {
+    stop("No exons found for transcript = '", transcript, "' in gene ", gene)
+  }
+  
+  # Extract the positions of the boundaries. If the UTR is included, it makes
+  # sure the first and last exon start and stop when the coding region starts
+  # and ends. Through ANXA11, I found a bug: in some genes, translation starts
+  # or ends in exons which are not the first/last exons, which means you have
+  # full-UTR-exons. I now adapted the code to correct for that, so this step
+  # provides exons_ref and utr_ref in one go
+  # I also liked to have the option to draw the full transcript (including UTR 
+  # but without making the UTR a special box), that's why the UTR argument 
+  # exists
+  if (include_utr) {
+    tx_selected <- tx_selected |>
+      mutate(
+        start_coding = ifelse(
+          (exon_seq_start < tx_cds_seq_start & tx_cds_seq_start < exon_seq_end),
+          TRUE, FALSE
+          ),
+        end_coding = ifelse(
+          (exon_seq_start < tx_cds_seq_end & tx_cds_seq_end < exon_seq_end),
+          TRUE, FALSE
+          ),
+        # Name rows containing UTR, which either are the rows with
+        # start_coding or end_coding, or the rows before/after it, respectively
+        contain_utr = case_when(
+          start_coding ~ "start",
+          end_coding ~ "end", 
+          row_number() < which(start_coding) ~ "before_start",
+          row_number() > which(end_coding) ~ "after_end",
+          .default = "no"
+          ),
+      )
+    # For exons_ref, exclude the rows which are before or after the start
+    exons_ref <- tx_selected |>
+      dplyr::filter(contain_utr != "before_start" & contain_utr != "after_end") |>
+        # If it's the first exon, the start should be tx_cds_seq_start, 
+        # otherwise just the exon_seq_start. If it's the last exon, the end 
+        # should be tx_cds_seq_end, otherwise just the exon_seq_end
+      mutate(
+        xmin_exon = if_else(
+          start_coding, 
+          tx_cds_seq_start, exon_seq_start
+        ),
+        xmax_exon = if_else(
+          end_coding, 
+          tx_cds_seq_end, exon_seq_end
+        ),
+        ymin_exon = -0.2,
+        ymax_exon = 0.2
+      )
+    # Create utrs_ref. Filter all rows which are not in UTR, as all other
+    # ones either have the start or end of coding (and thus a UTR) or are
+    # exons before or after coding starts
+    utrs_ref <- tx_selected |>
+      dplyr::filter(contain_utr != "no") |>
+      # For exons which contain the coding end, make xmin the coding end +1
+      # For exons which contain the coding start, make xmax the coding start -1
+      mutate(
+        xmin_utr = if_else(end_coding, tx_cds_seq_end + 1, exon_seq_start),
+        xmax_utr = if_else(start_coding, tx_cds_seq_start - 1, exon_seq_end),
+        ymin_utr = -0.1,
+        ymax_utr = 0.1
+      )
+  } else {
+    exons_ref <- tx_selected |>
+      mutate(
+        xmin_exon = exon_seq_start,
+        xmax_exon = exon_seq_end,
+        ymin_exon = -0.2,
+        ymax_exon = 0.2
+      )
+    utrs_ref <- NULL
+  }
+  
+  # Extract intron positions
+  introns_ref <- tx_selected |>
+    mutate(
+      xmin_intron = exon_seq_end + 1,
+      xmax_intron = lead(exon_seq_start) - 1,
+      ymin_intron = -0.02,
+      ymax_intron = 0.02
+    ) |>
+    dplyr::select(seq_strand, xmin_intron, xmax_intron, 
+                  ymin_intron, ymax_intron) |>
+    # The last row produces an NA, as it tries to find an intron after the last
+    # exon: remove this row, as the figure should stop at the last exon
+    dplyr::filter(!is.na(xmax_intron))
+  
+  # Add a middle point to each intron so I can add an arrowhead. Then select
+  # positions left and right from the middlepoint, with the width dependent on
+  # intron size. Then make it go from left to right for the forward strand and
+  # from right to left for the reverse strand
+  introns_arrows <- introns_ref |>
+    mutate(
+      midpoint = (xmin_intron + xmax_intron) / 2,
+      delta = (xmax_intron - xmin_intron) * 0.1,
+      left_pos = midpoint - delta,
+      right_pos = midpoint + delta,
+      start_arrow = if_else(seq_strand == 1, left_pos, right_pos),
+      end_arrow = if_else(seq_strand == 1, right_pos, left_pos),
+      y_arrow = 0
+    ) |>
+    # I only want arrows on introns which are long enough, because it will
+    # look ugly otherwise.
+    dplyr::filter(delta >= 0.3 * max(delta))
+  
+  # I've created a lot of dataframes, so return it as a list
+  list(
+    exons_ref = exons_ref,
+    introns_ref = introns_ref,
+    introns_arrows = introns_arrows,
+    utrs_ref = utrs_ref
+  )
+}
+```
+
+`visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene.
+
+```{r}
+#| label: chunk-13-helper-visualize-junction
+visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
+                               show_utr = TRUE,
+                               margin_prop = 0.05,
+                               exon_fill = "skyblue2",
+                               intron_fill = "#404040",
+                               utr_fill = "#E9ECEF") {
+  
+  exons_ref <- ref$exons_ref
+  introns_ref <- ref$introns_ref
+  introns_arrows <- ref$introns_arrows
+  utrs_ref <- ref$utrs_ref
+  
+  # parse + classify + add the y/yend plotting constants, all in one place. 
+  # If junction is NULL, junction_curve should end up NULL too, so the 
+  # geom_curve layer can be skipped below.
+  if (!is.null(junction)) {
+    if (is.null(exons_gene)) {
+      stop("exons_gene is required when junction is supplied")
+    }
+    junction_ti <- parse_junction(junction)
+    junction_curve <- classify_junction(junction_ti, exons_gene) |>
+      mutate(y_junction = 0.02, yend_junction = 0.02)
+  } else {
+    junction_curve <- NULL
+  }
+  
+  # I want to have white space left and right of the gene, so define variables
+  # which will serve as input to coord_cartesian
+  if (!is.null(utrs_ref)) {
+    coord_xmin_raw <- min(utrs_ref$xmin_utr)
+    coord_xmax_raw <- max(utrs_ref$xmax_utr)
+  } else {
+    coord_xmin_raw <- min(exons_ref$xmin_exon)
+    coord_xmax_raw <- max(exons_ref$xmax_exon)
+  }
+  gene_span <- coord_xmax_raw - coord_xmin_raw
+  coord_margin <- gene_span * margin_prop
+  coord_xmin <- coord_xmin_raw - coord_margin
+  coord_xmax <- coord_xmax_raw + coord_margin
+  
+  # Create title. Include transcript name in the title
+  transcript_name <- exons_ref$tx_id[1]
+  title <- paste0("Transcript ",  transcript_name, " of ", gene)
+  # Create subtitle if junction was provided, include junction name and category
+  if (!is.null(junction_curve)) {
+    category <- junction_curve$category
+    subtitle <- paste0(junction, ", category: ", category)
+  }
+  # Create x-axis label
+  chr <- unique(exons_ref$seq_name)
+  x_label <- paste0("Position on chr", chr, " (GRCh38)")
+  
+  # Build plot, layer by layer
+  p <- ggplot() +
+    geom_rect(
+      data = exons_ref,
+      aes(xmin = xmin_exon, xmax = xmax_exon, ymin = ymin_exon, ymax = ymax_exon),
+      colour = "black", fill = exon_fill
+    ) +
+    geom_segment(
+      data = introns_arrows,
+      aes(x = start_arrow, xend = end_arrow, y = y_arrow, yend = y_arrow),
+      arrow = arrow(length = unit(0.8, "cm"), type = "open", angle = 50),
+      linewidth = 1
+    ) +
+    geom_rect(
+      data = introns_ref,
+      aes(xmin = xmin_intron, xmax = xmax_intron, ymin = ymin_intron, ymax = ymax_intron),
+      colour = "black", fill = intron_fill
+    )
+  
+  # Add UTR, but only if show_utr is TRUE AND utrs_ref isn't NULL.
+  if (!is.null(utrs_ref) & show_utr) {
+    p <- p + geom_rect(
+      data = utrs_ref,
+      aes(xmin = xmin_utr, xmax = xmax_utr, ymin = ymin_utr, ymax = ymax_utr),
+      colour = "black", fill = utr_fill
+    )
+  }
+  
+  # Add the junction arc, but only if junction_curve isn't NULL
+  if (!is.null(junction_curve)) {
+    p <- p + geom_curve(
+      data = junction_curve,
+      aes(x = donor, xend = acceptor, y = y_junction, yend = yend_junction),
+      curvature = 2, ncp = 1, linewidth = 0.8,
+      arrow = arrow(length = unit(0.03, "npc"))
+    )
+  }
+  
+  # Theme, scale and layers
+  p <- p +
+    coord_cartesian(xlim = c(coord_xmin, coord_xmax), ylim = c(-0.3, 0.3)) +
+    theme_classic() +
+    theme(
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      axis.line.y = element_blank(),
+      plot.title = element_text(hjust = 0.5),
+      plot.subtitle = element_text(hjust = 0.5)
+    ) +
+    scale_x_continuous(labels = function(x) paste0(round(x / 1e6, 3), " Mb"))
+  
+  # Only add subtitle if a junction was provided
+  if (!is.null(junction_curve)) {
+    p <- p + labs(x = x_label, title = title, subtitle = subtitle)
+  } else {
+    p <- p + labs(x = x_label, title = title)
+  }
+  
+  p
+}
+```
+
+# Pseudobulk differential expression
+
+For each gene, I load its junction Seurat and run `run_deseq_junction()`. The loop:
+
+- stores the DESeq2 results on disk as `deseq_condition_<gene>.csv`;
+- creates an MA plot and a dotplot of the top `n_top_junctions` junctions (sorted by lowest raw p-value)
+- creates a table with results of the top `n_top_junctions` to be printed below;
+- saves violin plots of these top junctions to disk, one file per junction, for both the raw `counts` and the normalised `data` layer.
+
+If DESeq2 fails for a gene (for example because of the sparse counts), the loop reports the error and moves on to the next gene.
+
+```{r}
+#| label: chunk-15-run-deseq-loop
+ma_plots <- list()
+dot_plots <- list()
+top_tables <- list()
+
+for (gene in genes) {
+  cat("## For loop on gene:", gene, "\n")
+  
+  seu <- readRDS(file.path(dir_data, paste0("junction_seurat_", gene, ".rds")))
+  cat("  Normalisation of this object:", seu@misc$normalization, "\n")
+  cat("  ", ncol(seu), " cells, ", nrow(seu), " junctions\n", sep = "")
+  cat("  Number of cells per sample:\n")
+  print(table(seu@meta.data[[sample_var]]))
+  
+  ## DESeq2 ---------------------------------------------------------------------
+  
+  deseq_out <- tryCatch(
+    run_deseq_junction(
+      seu, 
+      sample_var = sample_var, 
+      condition_var = condition_var,
+      ref_level = ref_level, 
+      test_level = test_level,
+      covariate_vars = covariate_vars
+    ),
+    error = function(e) {
+      cat("  DESeq2 failed for", gene, ":", conditionMessage(e), "\n")
+      NULL
+    }
+  )
+  if (is.null(deseq_out)) next
+  
+  cat("  Sample metadata used for DESeq2:\n")
+  print(deseq_out$meta)
+  
+  res_sorted <- deseq_out$res_sorted
+  write_csv(res_sorted, file.path(dir_tab, paste0("deseq_condition_", gene, ".csv")))
+  
+  ## MA plot --------------------------------------------------------------------
+  
+  p_ma <- plot_ma(deseq_out$res, gene, alpha = alpha_ma)
+  save_plot(p_ma, paste0("maplot_", gene), width = 7, height = 5, apply_theme = FALSE)
+  ma_plots[[gene]] <- p_ma
+  
+  ## Top junctions --------------------------------------------------------------
+  
+  # Junctions without a p-value (NA) are not considered
+  res_top <- res_sorted |>
+    dplyr::filter(!is.na(pvalue)) |>
+    head(n_top_junctions)
+  top_junctions <- res_top$junction
+  
+  top_tables[[gene]] <- res_top |>
+    mutate(across(where(is.numeric), \(x) signif(x, 3)))
+  
+  if (length(top_junctions) == 0) {
+    cat("  No junctions with a p-value for", gene, "- skipping plots\n")
+    next
+  }
+  
+  # Set identities so I can compare ALS vs Ctrl in the Seurat plots
+  Idents(seu) <- condition_var
+  
+  p_dot <- DotPlot(seu, features = top_junctions) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  save_plot(p_dot, paste0("dotplot_", gene), width = 6, height = 6, apply_theme = FALSE)
+  dot_plots[[gene]] <- p_dot
+  
+  # VlnPlot() with multiple features returns a patchwork object, so I make a
+  # separate plot per junction and layer
+  for (layer in c("counts", "data")) {
+    for (junction in top_junctions) {
+      p_vln <- VlnPlot(seu, features = junction, layer = layer)
+      # A ":" cannot be in a filename, so replace it
+      junction_file <- str_replace_all(junction, ":", "_")
+      save_plot(
+        p_vln, paste0("vlnplot_", gene, "_", layer, "_", junction_file),
+        width = 6, height = 5, apply_theme = FALSE
+      )
+    }
+  }
+  
+  rm(seu, deseq_out); gc()
+}
+```
+
+# Results
+
+## MA plots
+
+Mean expression (log scale) against the log2 fold change (ALS vs Ctrl) per junction. Red junctions have an adjusted p-value below `alpha_ma`.
+
+```{r}
+#| label: chunk-16-display-ma-plots
+#| output: asis
+#| fig-width: 7
+#| fig-height: 5
+print_tabset(ma_plots)
+```
+
+## Dotplots of the top junctions
+
+Dotplots of the top `n_top_junctions` junctions per gene (lowest raw p-value), split by condition.
+
+```{r}
+#| label: chunk-17-display-dotplots
+#| output: asis
+#| fig-width: 6
+#| fig-height: 6
+print_tabset(dot_plots)
+```
+
+## Top results per gene
+
+Results are sorted by the raw p-value (`pvalue`), as the adjusted p-value (`padj`) can be `NA` (DESeq2's independent filtering or outlier detection). Both columns are in the `.csv` files.
+
+```{r}
+#| label: chunk-18-display-top-tables
+#| output: asis
+print_tabset(top_tables)
+```
+
+# Exon junction plots
+
+For junctions I find interesting in the results above, I can draw the junction relative to a reference transcript with the functions from the helper section. The Ensembl database is downloaded with `AnnotationHub` into a cache folder in `data/temporary/`.
+
+```{r}
+#| label: chunk-19-ensdb-connect
+# Set annotationhub
+setAnnotationHubOption("CACHE", dir_cache)
+ah <- AnnotationHub()
+
+# Which EnsDb records are available for human GRCh38?
+query(ah, c("EnsDb", "Homo sapiens", "GRCh38"))
+
+# At the moment I ran this script (and with AnnotationHub v2.30.0 and ensebmldb
+# v2.30.0), the latest available one was "AH119325". I defined this specific
+# version under "Defining # Variables", so open here: 
+edb <- ah[[ensdb_record]]
+edb
+```
+
+```{r}
+#| label: chunk-xx--prepare-junction-visualization
+#| fig-cap: "Exon junction relative to the reference transcript of its gene."
+# Only run it for genes which have results in top_tables - genes without
+# any relevant exon junctions would only give errors
+gene_junction_plots <- list()
+for (gene in names(top_tables)) {
+  # Extract junctions of this gene from previous results
+  junctions_to_viz <- unique(top_tables[[gene]]$junction)
+
+  # Reference transcript: 
+  # If a manual choice was provided in "Defining Variables", use it, otherwise
+  # use I'm just taking the canonical transcript
+  transcript <- if (gene %in% names(transcript_ref)) {
+    transcript <- transcript_ref[[gene]]
+  } else {
+    transcript <- "canonical"
+  }
+  
+  # Get the reference structure using the ensembl database and my function
+  # reference_structure()
+  exons_gene <- get_gene_exons(edb, gene)
+  ref_list <- reference_structure(gene, exons_gene, transcript = transcript)
+  
+  # Plot all junctions of this gene and store plots in a list for print_tabset()
+  junction_plots <- list()
+  for (junction in (junctions_to_viz)) {
+     p_junction <- visualize_junction(
+      ref_list, gene, junction = junction, exons_gene = exons_gene
+    )
+    # A ":" cannot be in a filename, so replace it
+    junction_file <- str_replace_all(junction, ":", "_")
+    save_plot(
+    p_junction, paste0("junction_", gene, "_", junction_file), 
+      width = 10, height = 4, apply_theme = FALSE
+    )
+    junction_plots[[junction]] <- p_junction
+  }
+  # Add the junction plots of this gene to the overarching per-gene list
+  gene_junction_plots[[gene]] <- junction_plots 
+}
+
+```
+
+Asis output so it gets formatted as markdown
+
+```{r}
+#| label: chunk-xx-display-gfap-junctions
+#| output: asis
+#| fig-width: 8
+#| fig-height: 4
+junction_plots_gfap <- gene_junction_plots$GFAP
+print_tabset(junction_plots_gfap)
+```
+
+```{r}
+#| label: chunk-xx-display-anxa11-junctions
+#| output: asis
+#| fig-width: 8
+#| fig-height: 4
+
+junction_plots_anxa11 <- gene_junction_plots$ANXA11
+print_tabset(junction_plots_anxa11)
+```
+
+# Session info
+
+I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+
+```{r}
+#| label: chunk-99-sessioninfo
+sessionInfo()
+```
