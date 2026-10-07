@@ -38,6 +38,11 @@ dependencies:
 - bioconductor-genomicranges
 - bioconductor-geneoverlap
 
+# For long-read scripts
+- bioconductor-deseq2=1.46.0
+- bioconductor-ensembldb=2.30.0
+- bioconductor-annotationhub=3.14.0
+
 # For using quarto
 - r-knitr
 - quarto
