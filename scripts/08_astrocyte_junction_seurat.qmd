@@ -187,7 +187,8 @@ qc_features <- c(
 
 # Genes of interest.
 # NOTE: keep this list in sync with 09 and 10!
-genes <- c("GFAP", "ANXA11", "CRYAB")
+genes <- c("GFAP", "ANXA11", "CRYAB", "CHI3L1", "OSMR", "HPSB1", "TNC", 
+           "ALPK1", "C3", "VIM", "HPSE2", "GPC5")
 
 # Minimal number of reads of the specific gene for a cell to be kept
 min_cell_gene <- 1
@@ -262,16 +263,14 @@ I created my own themes to add to figures. `theme_quarto()` is used to add theme
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "none") {
-  theme_classic() +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position
     )
 }
 
-theme_manuscript <- function(base_size = 8, legend_position = "none",
+theme_manuscript <- function(legend_position = "none",
                          axis_text_size = 6, tag_text_size = 14) {
-  theme_classic(base_size = base_size) +
     theme(
       plot.title = element_blank(),
       legend.position = legend_position,
@@ -450,6 +449,18 @@ new_cols <- setdiff(colnames(meta), colnames(seu@meta.data))
 seu <- AddMetaData(seu, metadata = meta[shared, new_cols, drop = FALSE])
 cat("  Added columns:", paste(new_cols, collapse = ", "), "\n")
 
+# Add a condition column with ALS vs Ctrls, as this does not yet exist
+seu@meta.data <- seu@meta.data |>
+  mutate(
+    condition = ifelse(
+      str_detect(AnonymousID, "Ctrl") == TRUE,
+      "Ctrl",
+      "ALS"
+    )
+  )
+
+# Stop if the variable we group by is not in the metadata
+# (I group by AnonymousID, so it should be fine)
 stopifnot(group_var %in% colnames(seu@meta.data))
 ```
 
@@ -827,6 +838,8 @@ annotation_df <- seu_sr@meta.data[
 ]
 seu_junctions_astro <- AddMetaData(seu_junctions_astro, metadata = annotation_df)
 
+# There should not be any missing annotations, as I subsetted using the barcodes
+# of this same Seurat object
 cat("Missing annotations:", sum(is.na(seu_junctions_astro@meta.data[[annotation_var]])), "\n")
 print(table(seu_junctions_astro@meta.data[[annotation_var]]))
 ```
