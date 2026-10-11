@@ -394,6 +394,10 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
     stop("No exons found for transcript = '", transcript, "' in gene ", gene)
   }
   
+  # Sometimes, exons are included starting with "LRG", which bug the
+  # visualization, so filter rows starting with ENSE
+  tx_selected <- dplyr::filter(tx_selected, str_starts(exon_id, "ENSE"))
+  
   # Extract the positions of the boundaries. If the UTR is included, it makes
   # sure the first and last exon start and stop when the coding region starts
   # and ends. Through ANXA11, I found a bug: in some genes, translation starts
@@ -407,11 +411,11 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
     tx_selected <- tx_selected |>
       mutate(
         start_coding = ifelse(
-          (exon_seq_start < tx_cds_seq_start & tx_cds_seq_start < exon_seq_end),
+          (exon_seq_start <= tx_cds_seq_start & tx_cds_seq_start < exon_seq_end),
           TRUE, FALSE
           ),
         end_coding = ifelse(
-          (exon_seq_start < tx_cds_seq_end & tx_cds_seq_end < exon_seq_end),
+          (exon_seq_start < tx_cds_seq_end & tx_cds_seq_end <= exon_seq_end),
           TRUE, FALSE
           ),
         # Name rows containing UTR, which either are the rows with
@@ -508,7 +512,9 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
 }
 ```
 
-`visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene.
+`visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene - these can also be set manually.
+There's also an option to print multiple junctions; this does require me to provide a very specific manaul input though.
+
 
 ```{r}
 #| label: chunk-13-helper-visualize-junction
@@ -517,8 +523,13 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
                                margin_prop = 0.05,
                                exon_fill = "skyblue2",
                                intron_fill = "#404040",
-                               utr_fill = "#E9ECEF") {
-  
+                               utr_fill = "#E9ECEF",
+                               manual_margin = FALSE, 
+                               xmin = NULL, xmax = NULL,
+                               curvature_arrow = 2,
+                               multiple_junctions = FALSE, 
+                               junctions_tibble = NULL
+                               ) {
   exons_ref <- ref$exons_ref
   introns_ref <- ref$introns_ref
   introns_arrows <- ref$introns_arrows
@@ -539,22 +550,33 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   }
   
   # I want to have white space left and right of the gene, so define variables
-  # which will serve as input to coord_cartesian
-  if (!is.null(utrs_ref)) {
-    coord_xmin_raw <- min(utrs_ref$xmin_utr)
-    coord_xmax_raw <- max(utrs_ref$xmax_utr)
+  # which will serve as input to coord_cartesian. By default, it takes 0.05
+  # the distance of the exon, but users can also set it manually by setting
+  # manual_margin to TRUE and adding xmin and xmax
+  if(manual_margin) {
+    coord_xmin <- xmin
+    coord_xmax <- xmax
   } else {
-    coord_xmin_raw <- min(exons_ref$xmin_exon)
-    coord_xmax_raw <- max(exons_ref$xmax_exon)
+      if (!is.null(utrs_ref)) {
+      coord_xmin_raw <- min(utrs_ref$xmin_utr)
+      coord_xmax_raw <- max(utrs_ref$xmax_utr)
+    } else {
+      coord_xmin_raw <- min(exons_ref$xmin_exon)
+      coord_xmax_raw <- max(exons_ref$xmax_exon)
+    }
+    gene_span <- coord_xmax_raw - coord_xmin_raw
+    coord_margin <- gene_span * margin_prop
+    coord_xmin <- coord_xmin_raw - coord_margin
+    coord_xmax <- coord_xmax_raw + coord_margin
   }
-  gene_span <- coord_xmax_raw - coord_xmin_raw
-  coord_margin <- gene_span * margin_prop
-  coord_xmin <- coord_xmin_raw - coord_margin
-  coord_xmax <- coord_xmax_raw + coord_margin
-  
-  # Create title. Include transcript name in the title
+
+  # Create title. Include transcript name and canonical if the case
   transcript_name <- exons_ref$tx_id[1]
-  title <- paste0("Transcript ",  transcript_name, " of ", gene)
+  if (exons_ref$tx_is_canonical[1] == 1) {
+    title <- paste0("Transcript ",  transcript_name, " (canonical) of ", gene)
+  } else {
+    title <- paste0("Transcript ",  transcript_name, " of ", gene)
+  }
   # Create subtitle if junction was provided, include junction name and category
   if (!is.null(junction_curve)) {
     category <- junction_curve$category
@@ -594,17 +616,77 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   
   # Add the junction arc, but only if junction_curve isn't NULL
   if (!is.null(junction_curve)) {
+    # Curvature is an annoying argument: it needs to be positive if the gene is 
+    # on the reverse strand but positive if it is on the forward strand. It also
+    # needs to be lower if it's a junction spanning a lot of distance
+    # I let users add it manually (with default 2), turn it negative if on
+    # forward strand and positive if on reverse strand
+    if (exons_ref$seq_name[1] == 1) {
+      curvature_arrow <- -abs(curvature_arrow)
+    } else {
+      curvature_arrow <- abs(curvature_arrow)
+    }
     p <- p + geom_curve(
       data = junction_curve,
       aes(x = donor, xend = acceptor, y = y_junction, yend = yend_junction),
-      curvature = 2, ncp = 1, linewidth = 0.8,
+      curvature = curvature_arrow, ncp = 1, linewidth = 0.8,
       arrow = arrow(length = unit(0.03, "npc"))
     )
   }
   
+  if (multiple_junctions) {
+    pattern <- "^(chr\\w+):(\\d+):(\\d+)"
+    junctions_tibble <- junctions_tibble |>
+      mutate(
+        chromosome = str_match(junction, pattern)[,2],
+        pos1 = as.numeric(str_match(junction, pattern)[,3]) - 1,
+        pos2 = as.numeric(str_match(junction, pattern)[,4]) + 1,
+        middle = ((pos2 - pos1) / 2) + pos1 # Needed to add labels
+        )
+    # Rename pos1 and pos2 to x and xend; which becomes which depends on the
+    # strand
+    if (exons_ref$seq_name[1] == 1) {
+      junctions_tibble <- junctions_tibble |>
+        dplyr::rename(x = pos1, xend = pos2)
+    } else {
+      junctions_tibble <- junctions_tibble |>
+        dplyr::rename(x = pos2, xend = pos1)
+    }
+    junctions_tibble <- junctions_tibble |>
+      mutate(
+        y = case_when(
+          canonical ~ 0.25,
+          layer == -1 ~ -0.4,
+          layer == -2 ~ -0.5,
+          .default = -0.3
+        ),
+        yend = y,
+        y_label = y + 0.035,
+      )
+    p <- p + geom_segment(
+      data = junctions_tibble,
+      aes(x = x, xend = xend, y = y, yend = yend),
+      arrow = arrow(length = unit(0.2, "cm"), type = "closed")
+    ) +
+      geom_text(
+        data = junctions_tibble,
+        aes(x = middle, y = y_label, label = label)
+      )
+    # Set ylim for the next plot; needs to be different for multiple junctions
+    # ylim should only be adapted if layers go below 0
+    if (min(junctions_tibble$layer) <= -1) {
+      ylim <- c(min(junctions_tibble$y) - 0.02, 0.3)
+    } else {
+      ylim <- c(-0.3, 0.3)
+    }
+  # Also set ylim default if one doesn't plot multiple junctions  
+  } else {
+    ylim <- c(-0.3, 0.3)
+  }
+  
   # Theme, scale and layers
   p <- p +
-    coord_cartesian(xlim = c(coord_xmin, coord_xmax), ylim = c(-0.3, 0.3)) +
+    coord_cartesian(xlim = c(coord_xmin, coord_xmax), ylim = ylim) +
     theme_classic() +
     theme(
       axis.text.y = element_blank(),
@@ -622,10 +704,10 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   } else {
     p <- p + labs(x = x_label, title = title)
   }
-  
   p
 }
 ```
+
 
 ### which_known_transcript()
 
@@ -973,19 +1055,209 @@ junction_plots_anxa11 <- gene_junction_plots$ANXA11
 print_tabset(junction_plots_anxa11)
 ```
 
+
+## Summary plots
+
 ```{r}
-#| label: chunk-xx-test-which-known-transcript
+#| label: fig-xx-summary-plot-gfap
 gene <- "GFAP"
-junction <- "chr17:44905781:44908063"
+# I provide the input to the summary plot manually, so I can control which
+# junction gets which label and which junctions should be below each other
+junctions_tibble <- tribble(
+  ~junction, ~label, ~canonical, ~layer, 
+  "chr17:44914089:44915025:-", "J1", TRUE, 0,
+  "chr17:44913824:44914027:-", "J2", TRUE, 0,
+  "chr17:44913431:44913727:-", "J3", TRUE, 0,
+  "chr17:44911798:44913268:-", "J4", TRUE, 0,
+  "chr17:44908150:44910614:-", "J5", TRUE, 0,
+  "chr17:44907389:44908063:-", "J6", TRUE, 0,
+  "chr17:44913824:44915025:-", "J7", FALSE, 0,
+  "chr17:44910875:44911235:-", "J8", FALSE, 0,
+  "chr17:44905781:44908063:-", "J9", FALSE, -2,
+  "chr17:44905150:44908063:-", "J10", FALSE, -1,
+  "chr17:44904555:44908063:-", "J11", FALSE, 0,
+  "chr17:44903560:44904441:-", "J12", FALSE, -1
+)
+
 
 exons_gene <- get_gene_exons(edb, gene)
+ref_list <- reference_structure(gene, exons_gene)
+p_junc_summary_gfap <- visualize_junction(
+  ref_list, 
+  gene, 
+  multiple_junctions = TRUE, 
+  junctions_tibble = junctions_tibble
+  )
+p_junc_summary_gfap
+
+save_plot(
+    p_junc_summary_gfap, "junction_summary_gfap", 
+      width = 10, height = 4, apply_theme = FALSE
+    )
+
+```
+
+```{r}
+#| label: fig-xx-summary-plot-anxa11
+gene <- "ANXA11"
+# I provide the input to the summary plot manually, so I can control which
+# junction gets which label and which junctions should be below each other
+junctions_tibble <- tribble(
+  ~junction, ~label, ~canonical, ~layer, 
+  "chr10:80170916:80172806:-", "J13", TRUE, 0,
+  "chr10:80155913:80157640:-", "J14", TRUE, 0
+  )
+
+exons_gene <- get_gene_exons(edb, gene)
+ref_list <- reference_structure(gene, exons_gene)
+p_junc_summary_anxa <- visualize_junction(
+  ref_list, 
+  gene, 
+  multiple_junctions = TRUE, 
+  junctions_tibble = junctions_tibble
+  )
+p_junc_summary_anxa
+
+save_plot(
+    p_junc_summary_gfap, "junction_summary_anxa", 
+      width = 10, height = 4, apply_theme = FALSE
+    )
+
+```
+
+## Non-canonical junctions of GFAP
+
+### Exon-skipping of exon 2 (chr17:44913824:44915025)
+
+```{r}
+#| label: chunk-xx-gfap-noncan1
+# Set default for all next GFAP visualizations
+gene <- "GFAP"
+exons_gene <- get_gene_exons(edb, gene)
+# I looked up the xmin and xmax of the canonical transcript and will set this
+# manually for all further GFAP transcripts
+xmin <- 44902542
+xmax <- 44916117
+
+# Set junction
+junction <- "chr17:44913824:44915025"
+
+# Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction, exons_gene, 
-                                  type = "acceptor", tolerance = 1000)
-ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1],
-                                include_utr = FALSE)
+                                  type = "auto", tolerance = 0)
+nrow(tx_hits)
+tx_hits
+
+# Visualize the junction on the available transcript
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
+                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+
+```
+
+### Alternative acceptor exon 7 (chr17:44910875:44911235)
+
+```{r}
+#| label: chunk-xx-gfap-noncan2
+# Set junction
+junction <- "chr17:44910875:44911235"
+
+# Examine which known junctions there are for this gene
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "auto", tolerance = 0)
+nrow(tx_hits)
+tx_hits
+
+# Visualize the junction on the available transcript
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
+                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+
+```
+
+### Three junctions from exon 8 into 3' UTR
+
+#### (chr17:44904555:44908063)
+
+```{r}
+#| label: chunk-xx-gfap-noncan3
+# Set junction
+junction <- "chr17:44904555:44908063"
+
+# Examine which known junctions there are for this gene
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "auto", tolerance = 0)
+nrow(tx_hits)
+tx_hits
+
+# Visualize the junction on the first available transcript
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
+                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+
+```
+
+#### (chr17:44905150:44908063)
+
+```{r}
+#| label: chunk-xx-gfap-noncan4
+# Set junction
+junction <- "chr17:44905150:44908063"
+
+# Examine which known junctions there are for this gene
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "auto", tolerance = 0)
+nrow(tx_hits)
+tx_hits
+
+# Visualize the junction on the third available transcript - the first two did
+# not have UTR info
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[3])
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
+                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+
+```
+
+#### (chr17:44905781:44908063)
+
+```{r}
+#| label: chunk-xx-gfap-noncan5
+# Set junction
+junction <- "chr17:44905781:44908063"
+
+# Examine which known junctions there are for this gene
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "acceptor", tolerance = 500)
+nrow(tx_hits)
+tx_hits
+
+# Visualize this junction on the canonical transcript, as there is no full match
+ref_list <- reference_structure(gene, exons_gene)
 visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene)
 
 ```
+
+### Both donor and acceptor in 3' UTR (chr17:44903560:44904441)
+
+```{r}
+#| label: chunk-xx-gfap-noncan6
+# Set junction
+junction <- "chr17:44903560:44904441"
+
+# Examine which known junctions there are for this gene
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "auto", tolerance = 0)
+nrow(tx_hits)
+tx_hits
+
+# Visualize the junction on the fourth available transcript; on that one, it
+# actually is between translated exons, the others were between UTRs
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[4])
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
+                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+
+```
+
 # Session info
 
 I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
