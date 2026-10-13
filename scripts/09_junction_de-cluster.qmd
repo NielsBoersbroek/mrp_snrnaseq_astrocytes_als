@@ -203,19 +203,13 @@ theme_manuscript <- function(
     legend_position = "none",
     plot_title = element_blank(),
     axis_title_size = 8,
-    axis_text_size = 6, 
-    tag_text_size = 14
+    axis_text_size = 6
     ) {
     theme(
       plot.title = plot_title,
       legend.position = legend_position,
       axis.title = element_text(size = axis_title_size),
       axis.text = element_text(size = axis_text_size),
-      plot.tag = element_text(
-        face = "bold", 
-        size = tag_text_size, 
-        hjust = 0, vjust = 0
-        ),
       legend.key.size = unit(0.4, "cm"), 
       legend.text = element_text(size = 8),
       legend.title = element_text(size = 9)
@@ -237,7 +231,8 @@ A live ggplot object carries its underlying data along with it — for plots bui
 save_plot <- function(
     p, filename, 
     width = 10, height = 6, 
-    figure = NULL, grob = TRUE, apply_theme = TRUE, add_tag = TRUE,
+    figure = NULL, grob = TRUE, apply_theme = TRUE, 
+    add_tag = TRUE, tag_text_size = 14,
     legend_pos_manuscript = "none"
     ) {
   ## Save image on disk as png and pdf
@@ -258,7 +253,14 @@ save_plot <- function(
     if (add_tag) {
       tag <- str_extract(figure, "[A-Z]$")
       p <- p + 
-        labs(tag = tag)
+        labs(tag = tag) + 
+        theme(
+          plot.tag = element_text(
+            face = "bold", 
+            size = tag_text_size, 
+            hjust = 0, vjust = 0
+            )
+        )
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
