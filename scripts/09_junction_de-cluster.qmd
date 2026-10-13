@@ -196,10 +196,15 @@ By default, `save_plot()` adds my themes (see below) to the plot. `theme_quarto(
 ```{r}
 #| label: chunk-05-helper-save-plot
 save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE, apply_theme = TRUE) {
+                      figure = NULL, grob = TRUE, apply_theme = TRUE,
+                      add_tag = FALSE) {
   ## Save image on disk as png and pdf
   # Add Quarto-specific theme, unless the plot has its own custom theme
-  p_image <- if (apply_theme) p + theme_quarto() else p
+  if (apply_theme) {
+    p_image <- p + theme_quarto()
+  } else {
+    p_image <- p
+  }
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
   ggsave(file_png, p_image, width = width, height = height, dpi = 150)
   file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
@@ -207,12 +212,20 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
+    # Add tag if needed
+    if (add_tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag)
+    }
     # Add manuscript-specific theme, unless the plot has its own custom theme
-    p_rds <- if (apply_theme) p + theme_manuscript() else p
+    if (apply_theme) {
+      p <- p + theme_manuscript()
+    }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p_rds <- ggplotGrob(p_rds)
+      p_rds <- ggplotGrob(p)
     }
     # Save on disk
     saveRDS(p_rds, file_rds)
@@ -224,21 +237,26 @@ save_plot <- function(p, filename, width = 10, height = 6,
 
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
 
+I adapted the themes for this script, specifically for saving the manually created junction plots
+
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "none") {
     theme(
-      plot.title = element_blank(),
       legend.position = legend_position
     )
 }
 
 theme_manuscript <- function(legend_position = "none",
-                         axis_text_size = 6, tag_text_size = 14) {
+                             title_text_size = 9, subtitle_text_size = 7,
+                             axis_title_size = 7, axis_text_size = 6,
+                             tag_text_size = 14) {
     theme(
-      plot.title = element_blank(),
-      legend.position = legend_position,
+      plot.title = element_text(size = title_text_size),
+      plot.subtitle = element_text(size = subtitle_text_size),
       axis.text = element_text(size = axis_text_size),
+      axis.title.x = element_text(size = axis_title_size),
+      legend.position = legend_position,
       plot.tag = element_text(
         face = "bold", 
         size = tag_text_size, 
@@ -513,7 +531,9 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
 ```
 
 `visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene - these can also be set manually.
-There's also an option to print multiple junctions; this does require me to provide a very specific manaul input though.
+For manuscript:
+- There's also an option to print multiple junctions; this does require me to provide a very specific manaul input though.
+- In the manuscript, I labelled junctions (e.g. J1, J2) - I added an option which allows you to enter this into the plot
 
 
 ```{r}
@@ -528,7 +548,8 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
                                xmin = NULL, xmax = NULL,
                                curvature_arrow = 2,
                                multiple_junctions = FALSE, 
-                               junctions_tibble = NULL
+                               junctions_tibble = NULL,
+                               junction_label = NULL
                                ) {
   exons_ref <- ref$exons_ref
   introns_ref <- ref$introns_ref
@@ -577,10 +598,16 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   } else {
     title <- paste0("Transcript ",  transcript_name, " of ", gene)
   }
-  # Create subtitle if junction was provided, include junction name and category
+  # Create subtitle if junction was provided, include junction name, category
+  # and junction label if provided
   if (!is.null(junction_curve)) {
     category <- junction_curve$category
-    subtitle <- paste0(junction, ", category: ", category)
+    if (!is.null(junction_label)) {
+      subtitle <- paste0(junction_label, " (", junction, 
+                         "), category: ", category)
+    } else {
+      subtitle <- paste0(junction, ", category: ", category)
+    }
   }
   # Create x-axis label
   chr <- unique(exons_ref$seq_name)
@@ -596,7 +623,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     geom_segment(
       data = introns_arrows,
       aes(x = start_arrow, xend = end_arrow, y = y_arrow, yend = y_arrow),
-      arrow = arrow(length = unit(0.8, "cm"), type = "open", angle = 50),
+      arrow = arrow(length = unit(0.1, "npc"), type = "open", angle = 50),
       linewidth = 1
     ) +
     geom_rect(
@@ -630,7 +657,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
       data = junction_curve,
       aes(x = donor, xend = acceptor, y = y_junction, yend = yend_junction),
       curvature = curvature_arrow, ncp = 1, linewidth = 0.8,
-      arrow = arrow(length = unit(0.03, "npc"))
+      arrow = arrow(length = unit(0.05, "npc"), type = "closed")
     )
   }
   
@@ -666,11 +693,12 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     p <- p + geom_segment(
       data = junctions_tibble,
       aes(x = x, xend = xend, y = y, yend = yend),
-      arrow = arrow(length = unit(0.2, "cm"), type = "closed")
+      arrow = arrow(length = unit(0.03, "npc"), type = "closed")
     ) +
       geom_text(
         data = junctions_tibble,
-        aes(x = middle, y = y_label, label = label)
+        aes(x = middle, y = y_label, label = label),
+        size = 6, size.unit = "pt"
       )
     # Set ylim for the next plot; needs to be different for multiple junctions
     # ylim should only be adapted if layers go below 0
@@ -971,6 +999,71 @@ print_tabset(dot_plots)
 print_tabset(top_tables)
 ```
 
+Create a csv file combining GFAP and ANXA11 results, to be used for the manuscript
+
+```{r}
+#| label: chunk-11-statistics-for-manuscript
+table_gfap <- top_tables$GFAP |>
+  mutate(gene = "GFAP")
+table_anxa11 <- top_tables$ANXA11 |>
+  mutate(gene = "ANXA11")
+
+table_manuscript <- rbind(table_gfap, table_anxa11)
+
+# I made this tibble for later visualization; I copied it here and will use it
+# now to add junction labels
+junctions_tibble <- tribble(
+  ~junction, ~label, ~canonical, ~layer, 
+  "chr17:44914089:44915025", "J1", TRUE, 0,
+  "chr17:44913824:44914027", "J2", TRUE, 0,
+  "chr17:44913431:44913727", "J3", TRUE, 0,
+  "chr17:44911798:44913268", "J4", TRUE, 0,
+  "chr17:44908150:44910614", "J5", TRUE, 0,
+  "chr17:44907389:44908063", "J6", TRUE, 0,
+  "chr17:44913824:44915025", "J7", FALSE, 0,
+  "chr17:44910875:44911235", "J8", FALSE, 0,
+  "chr17:44905781:44908063", "J9", FALSE, -2,
+  "chr17:44905150:44908063", "J10", FALSE, -1,
+  "chr17:44904555:44908063", "J11", FALSE, 0,
+  "chr17:44903560:44904441", "J12", FALSE, -1,
+  "chr10:80170916:80172806", "J13", TRUE, 0,
+  "chr10:80155913:80157640", "J14", TRUE, 0
+)
+
+pattern <- "chr\\d*:\\d*:\\d*"
+table_manuscript <- table_manuscript |>
+  dplyr::filter(p_val_adj < 0.05) |>
+  # It sometimes includes the strand and a number if a junction appears multiple
+  # times; remove these
+  mutate(junction = str_extract(junction, pattern)) |>
+  remove_rownames() |>
+  left_join(
+    dplyr::select(junctions_tibble, junction, label),
+    by = join_by(junction)
+  ) |>
+  relocate(gene, label, junction) |>
+  # To arrange, create a column in which the "J" is removed from the label,
+  # otherwise it does not order correctly (from 1 to 10, 11.., not 1, 2, 3)
+  mutate(ranking = as.numeric(str_remove(label, "J"))) |>
+  arrange(ranking) |>
+  dplyr::select(!ranking) |>
+  # Two values are really annoying, having for example 3.3399999999999998e-43, 
+  # so it doesn't round up to three digits. I'll manually fix it:
+  mutate(
+    p_val = case_when(
+      p_val == 3.3399999999999998e-43 ~ 3.33e-43,
+      p_val == 2.2599999999999999e-41	~ 2.26e-41,
+      .default = p_val
+      )
+    )
+
+table_manuscript
+
+file_csv <- file.path(dir_tab, "junctions_de_clusters_manuscript.csv")
+write_csv(table_manuscript, file_csv)
+
+```
+
 # Exon junction plots
 
 For junctions I find interesting in the results above, I can draw the junction relative to a reference transcript with the functions from the helper section. The Ensembl database is downloaded with `AnnotationHub` into a cache folder in `data/temporary/`.
@@ -1065,18 +1158,18 @@ gene <- "GFAP"
 # junction gets which label and which junctions should be below each other
 junctions_tibble <- tribble(
   ~junction, ~label, ~canonical, ~layer, 
-  "chr17:44914089:44915025:-", "J1", TRUE, 0,
-  "chr17:44913824:44914027:-", "J2", TRUE, 0,
-  "chr17:44913431:44913727:-", "J3", TRUE, 0,
-  "chr17:44911798:44913268:-", "J4", TRUE, 0,
-  "chr17:44908150:44910614:-", "J5", TRUE, 0,
-  "chr17:44907389:44908063:-", "J6", TRUE, 0,
-  "chr17:44913824:44915025:-", "J7", FALSE, 0,
-  "chr17:44910875:44911235:-", "J8", FALSE, 0,
-  "chr17:44905781:44908063:-", "J9", FALSE, -2,
-  "chr17:44905150:44908063:-", "J10", FALSE, -1,
-  "chr17:44904555:44908063:-", "J11", FALSE, 0,
-  "chr17:44903560:44904441:-", "J12", FALSE, -1
+  "chr17:44914089:44915025", "J1", TRUE, 0,
+  "chr17:44913824:44914027", "J2", TRUE, 0,
+  "chr17:44913431:44913727", "J3", TRUE, 0,
+  "chr17:44911798:44913268", "J4", TRUE, 0,
+  "chr17:44908150:44910614", "J5", TRUE, 0,
+  "chr17:44907389:44908063", "J6", TRUE, 0,
+  "chr17:44913824:44915025", "J7", FALSE, 0,
+  "chr17:44910875:44911235", "J8", FALSE, 0,
+  "chr17:44905781:44908063", "J9", FALSE, -2,
+  "chr17:44905150:44908063", "J10", FALSE, -1,
+  "chr17:44904555:44908063", "J11", FALSE, 0,
+  "chr17:44903560:44904441", "J12", FALSE, -1
 )
 
 
@@ -1092,7 +1185,8 @@ p_junc_summary_gfap
 
 save_plot(
     p_junc_summary_gfap, "junction_summary_gfap", 
-      width = 10, height = 4, apply_theme = FALSE
+      width = 10, height = 4,
+    figure = "F6C", add_tag = TRUE
     )
 
 ```
@@ -1102,7 +1196,7 @@ save_plot(
 gene <- "ANXA11"
 # I provide the input to the summary plot manually, so I can control which
 # junction gets which label and which junctions should be below each other
-junctions_tibble <- tribble(
+junctions_tibble_anxa11 <- tribble(
   ~junction, ~label, ~canonical, ~layer, 
   "chr10:80170916:80172806:-", "J13", TRUE, 0,
   "chr10:80155913:80157640:-", "J14", TRUE, 0
@@ -1114,13 +1208,15 @@ p_junc_summary_anxa <- visualize_junction(
   ref_list, 
   gene, 
   multiple_junctions = TRUE, 
-  junctions_tibble = junctions_tibble
+  junctions_tibble = junctions_tibble_anxa11
   )
 p_junc_summary_anxa
 
+# Save to disk
 save_plot(
-    p_junc_summary_gfap, "junction_summary_anxa", 
-      width = 10, height = 4, apply_theme = FALSE
+    p_junc_summary_anxa, "junction_summary_anxa", 
+    width = 10, height = 4,
+    figure = "F6D", , add_tag = TRUE
     )
 
 ```
@@ -1140,18 +1236,31 @@ xmin <- 44902542
 xmax <- 44916117
 
 # Set junction
-junction <- "chr17:44913824:44915025"
+junction_to_plot <- "chr17:44913824:44915025"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
 nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the available transcript
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
-                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax, 
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_exon2skip",
+          width = 10, height = 4,
+          figure = "F6E", add_tag = TRUE)
 
 ```
 
@@ -1160,18 +1269,31 @@ visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
 ```{r}
 #| label: chunk-xx-gfap-noncan2
 # Set junction
-junction <- "chr17:44910875:44911235"
+junction_to_plot <- "chr17:44910875:44911235"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
 nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the available transcript
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
-                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax, curvature_arrow = 6,
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_altacceptor7",
+          width = 10, height = 4,
+          figure = "F6F", add_tag = TRUE)
 
 ```
 
@@ -1182,18 +1304,31 @@ visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
 ```{r}
 #| label: chunk-xx-gfap-noncan3
 # Set junction
-junction <- "chr17:44904555:44908063"
+junction_to_plot <- "chr17:44904555:44908063"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
 nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the first available transcript
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
-                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax, curvature_arrow = 1.5,
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_exon8utr1",
+          width = 10, height = 4,
+          figure = "F6G", add_tag = TRUE)
 
 ```
 
@@ -1202,10 +1337,15 @@ visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
 ```{r}
 #| label: chunk-xx-gfap-noncan4
 # Set junction
-junction <- "chr17:44905150:44908063"
+junction_to_plot <- "chr17:44905150:44908063"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
 nrow(tx_hits)
 tx_hits
@@ -1213,8 +1353,16 @@ tx_hits
 # Visualize the junction on the third available transcript - the first two did
 # not have UTR info
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[3])
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
-                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax, curvature_arrow = 1.5,
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_exon8utr2",
+          width = 10, height = 4,
+          figure = "F6H", add_tag = TRUE)
 
 ```
 
@@ -1223,17 +1371,32 @@ visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
 ```{r}
 #| label: chunk-xx-gfap-noncan5
 # Set junction
-junction <- "chr17:44905781:44908063"
+junction_to_plot <- "chr17:44905781:44908063"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "acceptor", tolerance = 500)
 nrow(tx_hits)
 tx_hits
 
 # Visualize this junction on the canonical transcript, as there is no full match
 ref_list <- reference_structure(gene, exons_gene)
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax,
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_exon8utr3",
+          width = 10, height = 4,
+          figure = "F6I", add_tag = TRUE)
+
 
 ```
 
@@ -1242,10 +1405,15 @@ visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene)
 ```{r}
 #| label: chunk-xx-gfap-noncan6
 # Set junction
-junction <- "chr17:44903560:44904441"
+junction_to_plot <- "chr17:44903560:44904441"
+# Extract junction label from the tibble in which I defined
+junction_to_plot_label <- junctions_tibble[
+  junctions_tibble$junction == junction_to_plot,
+  "label"
+  ]
 
 # Examine which known junctions there are for this gene
-tx_hits <- which_known_transcript(junction, exons_gene, 
+tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
 nrow(tx_hits)
 tx_hits
@@ -1253,8 +1421,16 @@ tx_hits
 # Visualize the junction on the fourth available transcript; on that one, it
 # actually is between translated exons, the others were between UTRs
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[4])
-visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene,
-                   manual_margin = TRUE, xmin = xmin, xmax = xmax)
+p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
+                             exons_gene = exons_gene, manual_margin = TRUE, 
+                             xmin = xmin, xmax = xmax,
+                             junction_label = junction_to_plot_label)
+p_junc
+
+# Save to disk
+save_plot(p_junc, "junction_noncan_fullutr",
+          width = 10, height = 4,
+          figure = "F6J", add_tag = TRUE)
 
 ```
 
