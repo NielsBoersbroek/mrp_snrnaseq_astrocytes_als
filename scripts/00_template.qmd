@@ -116,20 +116,70 @@ This code block defines variables to be used throughout the rest of the document
 
 <summary>*Click here to view the helper functions of this document*</summary>
 
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+
+```{r}
+#| label: chunk-06-helper-themes
+theme_quarto <- function(
+    legend_position = "right", 
+    plot_title = element_blank()
+    ) {
+    theme(
+      plot.title = plot_title,
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(
+    legend_position = "none",
+    plot_title = element_blank(),
+    axis_title_size = 8,
+    axis_text_size = 6, 
+    tag_text_size = 14
+    ) {
+    theme(
+      plot.title = plot_title,
+      legend.position = legend_position,
+      axis.title = element_text(size = axis_title_size),
+      axis.text = element_text(size = axis_text_size),
+      plot.tag = element_text(
+        face = "bold", 
+        size = tag_text_size, 
+        hjust = 0, vjust = 0
+        ),
+      legend.key.size = unit(0.4, "cm"), 
+      legend.text = element_text(size = 8),
+      legend.title = element_text(size = 9)
+    )
+}
+
+```
+
 ### save_plot()
 
-This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure. You will not see saving of figures happening in this HTML output file, because I hid those chunks with `echo: false`.
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
 
-The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set `figure` to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
 
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
 #| label: chunk-05-helper-save-plot
-save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE) {
+save_plot <- function(
+    p, filename, 
+    width = 10, height = 6, 
+    figure = NULL, grob = TRUE, apply_theme = TRUE, add_tag = TRUE,
+    legend_pos_manuscript = "none"
+    ) {
   ## Save image on disk as png and pdf
-  p_image <- p + theme_quarto() # Add Quarto-specific theme
+  # Add Quarto-specific theme, unless the plot has its own custom theme
+  if (apply_theme) {
+    p_image <- p + theme_quarto()
+  } else {
+    p_image <- p
+  }
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
   ggsave(file_png, p_image, width = width, height = height, dpi = 150)
   file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
@@ -137,47 +187,25 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
-    p_rds <- p + theme_manuscript() # Add manuscript-specific theme
+    # Add tag if needed
+    if (add_tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag)
+    }
+    # Add manuscript-specific theme, unless the plot has its own custom theme
+    if (apply_theme) {
+      p <- p + theme_manuscript()
+    }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p_rds <- ggplotGrob(p_rds)
+      p <- ggplotGrob(p)
     }
     # Save on disk
-    saveRDS(p_rds, file_rds)
+    saveRDS(p, file_rds)
   }
 }
-```
-
-### theme_quarto() and theme_manuscript()
-
-I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
-
-```{r}
-#| label: chunk-06-helper-themes
-theme_quarto <- function(legend_position = "none") {
-  theme_classic() +
-    theme(
-      plot.title = element_blank(),
-      legend.position = legend_position
-    )
-}
-
-theme_manuscript <- function(base_size = 8, legend_position = "none",
-                         axis_text_size = 6, tag_text_size = 14) {
-  theme_classic(base_size = base_size) +
-    theme(
-      plot.title = element_blank(),
-      legend.position = legend_position,
-      axis.text = element_text(size = axis_text_size),
-      plot.tag = element_text(
-        face = "bold", 
-        size = tag_text_size, 
-        hjust = 0, vjust = 0
-        )
-    )
-}
-
 ```
 
 <!-- [Add any additional, script-specific helper functions here as their own
