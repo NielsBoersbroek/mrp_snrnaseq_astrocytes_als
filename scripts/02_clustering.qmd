@@ -151,10 +151,16 @@ A live ggplot object carries its underlying data along with it — for plots bui
 
 ```{r}
 #| label: chunk-05-helper-save-plot
-save_plot <- function(p, filename, width = 10, height = 6, figure = NULL, 
-                      grob = TRUE, legend_position_rds = "none") {
+save_plot <- function(p, filename, width = 10, height = 6, 
+                      figure = NULL, grob = TRUE, apply_theme = TRUE,
+                      add_tag = FALSE) {
   ## Save image on disk as png and pdf
-  p_image <- p + theme_quarto() # Add Quarto-specific theme
+  # Add Quarto-specific theme, unless the plot has its own custom theme
+  if (apply_theme) {
+    p_image <- p + theme_quarto()
+  } else {
+    p_image <- p
+  }
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
   ggsave(file_png, p_image, width = width, height = height, dpi = 150)
   file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
@@ -162,16 +168,20 @@ save_plot <- function(p, filename, width = 10, height = 6, figure = NULL,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
-    # Extract last letter to be the tag
-    tag <- str_extract(figure, "[A-Z]$")
-    p_rds <- p + 
-      labs(tag = tag) +
-      # Add manuscript-specific theme
-      theme_manuscript(legend_position = legend_position_rds) 
+    # Add tag if needed
+    if (add_tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag)
+    }
+    # Add manuscript-specific theme, unless the plot has its own custom theme
+    if (apply_theme) {
+      p <- p + theme_manuscript()
+    }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p_rds <- ggplotGrob(p_rds)
+      p_rds <- ggplotGrob(p)
     }
     # Save on disk
     saveRDS(p_rds, file_rds)
@@ -366,7 +376,11 @@ boxplot_composition <- function(cell_counts, variable = "AnonymousID") {
     aes(x = cellstate, y= Proportion, fill = !!sym(variable))
     ) +
     geom_boxplot() +
-    coord_flip() +
+    geom_point(
+      aes(group = !!sym(variable)), colour = "grey20", size = 1.5,
+      position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8)
+      ) +
+#   coord_flip() +
     theme_classic()
   
   p_box
@@ -1314,7 +1328,6 @@ save_plot(p_bar_sub, "cell_comp_subtype", figure = "F4M",
 
 ```
 
-
 # Save on disk
 
 
@@ -1322,6 +1335,121 @@ save_plot(p_bar_sub, "cell_comp_subtype", figure = "F4M",
 #| label: chunk-xx-save-to-disk
 file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 saveRDS(seu, file_rds)
+```
+
+# Figures for presentation
+
+This can be removed later
+
+```{r}
+#| label: chunk-xx-figures-for-presentation
+#| eval: false
+
+axis_text_size <- 8
+genes <- c("SNAP25", "NRXN1", "CRYAB", "CHI3L1", "OSMR", "HSPB1", "TNC", 
+           "ALPK1", "GPC5", "HPSE2")
+
+## Annotated PCA and UMAP ------------------------------------------------------
+
+# Paste your chosen option here (names must match your annotation labels exactly)
+ann_cols <- c(
+  "WM Astrocyte 1" = "#0072B2",
+  "WM Astrocyte 2" = "#56B4E9",
+  "GM Astrocyte"   = "#D55E00"
+)
+
+p_ann_pca <- DimPlot(
+  seu, 
+  reduction = "pca", 
+  group.by = "annotation", 
+  cols = ann_cols,
+  pt.size = 0.2
+  ) +
+  labs(x = "PC1", y = "PC2") +
+  theme(
+    plot.title = element_blank(),
+    axis.text = element_text(size = axis_text_size),
+    legend.position = "right"
+    )
+p_ann_umap <- DimPlot(
+  seu, 
+  reduction = "umap", 
+  group.by = "annotation", 
+  cols = ann_cols,
+  pt.size = 0.2
+  ) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  theme(
+    plot.title = element_blank(),
+    axis.text = element_text(size = axis_text_size),
+    legend.position = "right"
+    )
+
+save_plot(p_ann_pca, "presentation_annotated_pca", width = 7.5, height = 6,
+          apply_theme = FALSE)
+save_plot(p_ann_umap, "presentation_annotated_umap", width = 7.5, height = 6,
+          apply_theme = FALSE)
+
+
+## Allen annotation -----------------------------------------------------------
+
+
+ann_cols <- c(
+  "WM Astrocytes" = "#2E8BC0",
+  "GM Astrocytes"   = "#E69F00"
+)
+
+p_allen <- DimPlot(
+  seu, 
+  reduction = "umap", 
+  group.by = "predicted.id_coarse_allen_group", 
+  cols = ann_cols,
+  pt.size = 0.2
+  ) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  theme(
+    plot.title = element_blank(),
+    axis.text = element_text(size = axis_text_size),
+    legend.position = "right"
+    )
+p_allen
+
+save_plot(p_allen, "presentation_allen_umap", width = 7.5, height = 6,
+          apply_theme = FALSE)
+
+
+## Featureplots --------------------------------------------------------------
+
+for (gene in genes) {
+  p_fea <- FeaturePlot(seu, reduction = "umap", pt.size = 0.2, features = gene) +
+    labs(x = "UMAP1", y = "UMAP2") +
+    theme(
+      axis.text = element_text(size = axis_text_size),
+      legend.position = "none"
+      )
+  file_name <- paste0("presentation_featureplot_", gene)
+  save_plot(p_fea, file_name, width = 5.5, height = 5.5, apply_theme = FALSE)
+}
+
+
+## Boxplot composition --------------------------------------------------------
+
+
+cond_cols <- c(
+  "Ctrl" = "#BDBDBD",
+  "ALS"    = "#CC79A7"
+)
+
+# I added dots, that's a good addition!
+p_comp <- boxplot_composition(cell_counts, "condition") +
+  scale_fill_manual(values = cond_cols)
+p_comp
+
+save_plot(p_comp, "presentation_composition", width = 4.5, height = 5, 
+          apply_theme = FALSE)
+
+
+
 ```
 
 # Temporary file saving
