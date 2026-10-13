@@ -212,10 +212,15 @@ By default, `save_plot()` adds my themes (see below) to the plot. `theme_quarto(
 ```{r}
 #| label: chunk-05-helper-save-plot
 save_plot <- function(p, filename, width = 10, height = 6, 
-                      figure = NULL, grob = TRUE, apply_theme = TRUE) {
+                      figure = NULL, grob = TRUE, apply_theme = TRUE,
+                      add_tag = FALSE, legend_pos_grob = "none") {
   ## Save image on disk as png and pdf
   # Add Quarto-specific theme, unless the plot has its own custom theme
-  p_image <- if (apply_theme) p + theme_quarto() else p
+  if (apply_theme) {
+    p_image <- p + theme_quarto()
+  } else {
+    p_image <- p
+  }
   file_png <- file.path(dir_fig, paste0(filename, ".png"))
   ggsave(file_png, p_image, width = width, height = height, dpi = 150)
   file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
@@ -223,12 +228,20 @@ save_plot <- function(p, filename, width = 10, height = 6,
   
   ## Save the ggplot object on disk as an rds file 
   if (!is.null(figure)) {
+    # Add tag if needed
+    if (add_tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag)
+    }
     # Add manuscript-specific theme, unless the plot has its own custom theme
-    p_rds <- if (apply_theme) p + theme_manuscript() else p
+    if (apply_theme) {
+      p <- p + theme_manuscript(legend_position = legend_pos_grob)
+    }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
     if (grob) {
-      p_rds <- ggplotGrob(p_rds)
+      p_rds <- ggplotGrob(p)
     }
     # Save on disk
     saveRDS(p_rds, file_rds)
@@ -240,11 +253,12 @@ save_plot <- function(p, filename, width = 10, height = 6,
 
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.rds`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
 
+I slightly adapted the themes to include the title
+
 ```{r}
 #| label: chunk-06-helper-themes
 theme_quarto <- function(legend_position = "none") {
     theme(
-      plot.title = element_blank(),
       legend.position = legend_position
     )
 }
@@ -252,7 +266,6 @@ theme_quarto <- function(legend_position = "none") {
 theme_manuscript <- function(legend_position = "none",
                          axis_text_size = 6, tag_text_size = 14) {
     theme(
-      plot.title = element_blank(),
       legend.position = legend_position,
       axis.text = element_text(size = axis_text_size),
       plot.tag = element_text(
@@ -377,7 +390,8 @@ plot_ma <- function(res, gene, alpha = 0.05) {
       x = "Mean of normalised counts (baseMean)",
       y = paste0("log2 fold change (", test_level, " vs ", ref_level, ")")
     ) +
-    theme_classic()
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5))
 }
 ```
 
@@ -517,11 +531,11 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
     tx_selected <- tx_selected |>
       mutate(
         start_coding = ifelse(
-          (exon_seq_start < tx_cds_seq_start & tx_cds_seq_start < exon_seq_end),
+          (exon_seq_start <= tx_cds_seq_start & tx_cds_seq_start < exon_seq_end),
           TRUE, FALSE
           ),
         end_coding = ifelse(
-          (exon_seq_start < tx_cds_seq_end & tx_cds_seq_end < exon_seq_end),
+          (exon_seq_start < tx_cds_seq_end & tx_cds_seq_end <= exon_seq_end),
           TRUE, FALSE
           ),
         # Name rows containing UTR, which either are the rows with
@@ -627,7 +641,9 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
                                margin_prop = 0.05,
                                exon_fill = "skyblue2",
                                intron_fill = "#404040",
-                               utr_fill = "#E9ECEF") {
+                               utr_fill = "#E9ECEF",
+                               manual_border_coords = FALSE,
+                               xmin = NULL, xmax = NULL) {
   
   exons_ref <- ref$exons_ref
   introns_ref <- ref$introns_ref
@@ -650,18 +666,24 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   
   # I want to have white space left and right of the gene, so define variables
   # which will serve as input to coord_cartesian
-  if (!is.null(utrs_ref)) {
-    coord_xmin_raw <- min(utrs_ref$xmin_utr)
-    coord_xmax_raw <- max(utrs_ref$xmax_utr)
+  # There also is the option to provide these manually
+  if (manual_border_coords) {
+    coord_xmin <- xmin
+    coord_xmax <- xmax
   } else {
-    coord_xmin_raw <- min(exons_ref$xmin_exon)
-    coord_xmax_raw <- max(exons_ref$xmax_exon)
+      if (!is.null(utrs_ref)) {
+        coord_xmin_raw <- min(utrs_ref$xmin_utr)
+        coord_xmax_raw <- max(utrs_ref$xmax_utr)
+      } else {
+        coord_xmin_raw <- min(exons_ref$xmin_exon)
+        coord_xmax_raw <- max(exons_ref$xmax_exon)
+      }
+      gene_span <- coord_xmax_raw - coord_xmin_raw
+      coord_margin <- gene_span * margin_prop
+      coord_xmin <- coord_xmin_raw - coord_margin
+      coord_xmax <- coord_xmax_raw + coord_margin
   }
-  gene_span <- coord_xmax_raw - coord_xmin_raw
-  coord_margin <- gene_span * margin_prop
-  coord_xmin <- coord_xmin_raw - coord_margin
-  coord_xmax <- coord_xmax_raw + coord_margin
-  
+
   # Create title. Include transcript name in the title
   transcript_name <- exons_ref$tx_id[1]
   title <- paste0("Transcript ",  transcript_name, " of ", gene)
@@ -707,6 +729,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     p <- p + geom_curve(
       data = junction_curve,
       aes(x = donor, xend = acceptor, y = y_junction, yend = yend_junction),
+      # BUG: maybe should be negative if on forward strand!!
       curvature = 2, ncp = 1, linewidth = 0.8,
       arrow = arrow(length = unit(0.03, "npc"))
     )
@@ -736,6 +759,154 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   p
 }
 ```
+
+### which_known_transcript()
+
+By default, I print the exon junction on the canonical transcript, but I often find junctions which are in catalogue but which are not in the canonical transcript. I wrote the function `which_known_transcript()` to find the transcript in which such a known-but-not-in-canonical exon junction sits. You need to provide the junction and exons_gene output. Returns a tibble with one row per matching transcript. The offsets are (catalogued boundary - my site) in TRANSCRIPT direction: positive = the catalogued boundary lies downstream of my site, negative = upstream.
+
+Arguments of the function:
+- type: what type of site to look for. "donor" or "acceptor" (only search for that site), "full" (donor and acceptor are consecutive exons in the transcript = known junction), "both" (donor and acceptor both exist in the transcript, not nec. consecutive; includes "full"), "auto" (default; strictest level which returns whatever matched it best)
+- tolerance: maximum distance in bp between my site and a catalogued exon boundary. 0 = exact match; use e.g. 10 to find the nearest described junction for a novel one.
+
+```{r}
+#| label: chunk-xx-helper-which-known-transcript
+
+which_known_transcript <- function(junction, exons_gene, type = "auto",
+                                   tolerance = 0) {
+  ## Checks
+  if (length(junction) != 1) {
+    stop("Provide one junction string at a time")
+  }
+  junction_ti <- parse_junction(junction)
+  if (is.na(junction_ti$pos1)) {
+    stop("Could not parse junction string: ", junction)
+  }
+  # EnsDb chromosome names have no "chr" prefix, my junctions do
+  chr <- str_remove(junction_ti$chromosome, "^chr")
+  if (!(chr %in% exons_gene$seq_name)) {
+    stop("Junction is on chr", chr, ", but exons_gene is on chr ",
+         paste(unique(exons_gene$seq_name), collapse = ", "),
+         " - check that exons_gene belongs to the right gene")
+  }
+  strand <- unique(exons_gene$seq_strand)
+  if (length(strand) != 1) {
+    stop("exons_gene spans more than one strand - check the gene filter")
+  }
+  
+  ## Map (pos1, pos2) onto (donor, acceptor), same logic as classify_junction()
+  # direction flips the sign of the offsets on the reverse strand, so they are
+  # in transcript direction
+  if (strand == 1) {
+    donor_pos <- junction_ti$pos1
+    acceptor_pos <- junction_ti$pos2
+    donor_col <- "exon_seq_end"
+    acceptor_col <- "exon_seq_start"
+    direction <- 1
+  } else if (strand == -1) {
+    donor_pos <- junction_ti$pos2
+    acceptor_pos <- junction_ti$pos1
+    donor_col <- "exon_seq_start"
+    acceptor_col <- "exon_seq_end"
+    direction <- -1
+  } else {
+    stop("Unexpected strand value: ", strand)
+  }
+  
+  ## Distance of every exon boundary to my donor and acceptor
+  exons_offsets <- exons_gene |>
+    arrange(tx_id, exon_idx) |>
+    group_by(tx_id) |>
+    mutate(
+      donor_offset = (.data[[donor_col]] - donor_pos) * direction,
+      acceptor_offset = (.data[[acceptor_col]] - acceptor_pos) * direction,
+      # The acceptor of the NEXT exon in this transcript. The last exon gives NA
+      next_acceptor_offset = lead(acceptor_offset)
+    ) |>
+    ungroup() |>
+    mutate(
+      donor_hit = abs(donor_offset) <= tolerance,
+      acceptor_hit = abs(acceptor_offset) <= tolerance,
+      # A known PAIR: my donor on exon n and my acceptor on exon n + 1
+      pair_hit = donor_hit & coalesce(abs(next_acceptor_offset) <= tolerance, FALSE)
+    )
+  
+  ## One row per transcript
+  tx_summary <- exons_offsets |>
+    group_by(tx_id) |>
+    summarise(
+      tx_name = dplyr::first(tx_name),
+      is_canonical = coalesce(dplyr::first(tx_is_canonical) == 1, FALSE),
+      donor_match = any(donor_hit),
+      acceptor_match = any(acceptor_hit),
+      pair_match = any(pair_hit),
+      # Offset of the closest boundary in this transcript
+      donor_offset = donor_offset[which.min(abs(donor_offset))],
+      acceptor_offset = acceptor_offset[which.min(abs(acceptor_offset))],
+      .groups = "drop"
+    ) |>
+    mutate(
+      both_match = donor_match & acceptor_match,
+      match_level = case_when(
+        pair_match ~ "full",
+        both_match ~ "both",
+        donor_match ~ "donor",
+        acceptor_match ~ "acceptor",
+        .default = "none"
+      ),
+      # How far off is the match? Only the site(s) which matched count
+      distance = case_when(
+        match_level == "donor" ~ abs(donor_offset),
+        match_level == "acceptor" ~ abs(acceptor_offset),
+        .default = pmax(abs(donor_offset), abs(acceptor_offset))
+      )
+    )
+  
+  ## Select the transcripts for the requested type
+  if (type == "auto") {
+    type <- case_when(
+      any(tx_summary$pair_match) ~ "full",
+      any(tx_summary$both_match) ~ "both",
+      any(tx_summary$donor_match | tx_summary$acceptor_match) ~ "either",
+      .default = "none"
+    )
+  }
+  if (type == "full") {
+    keep <- tx_summary$pair_match
+  } else if (type == "both") {
+    keep <- tx_summary$both_match
+  } else if (type == "donor") {
+    keep <- tx_summary$donor_match
+  } else if (type == "acceptor") {
+    keep <- tx_summary$acceptor_match
+  } else if (type == "either") {
+    keep <- tx_summary$donor_match | tx_summary$acceptor_match
+  } else {
+    # type == "none": no transcript matched in "auto" mode, so keep nothing
+    keep <- rep(FALSE, nrow(tx_summary))
+  }
+  
+  result <- tx_summary |>
+    dplyr::filter(keep) |>
+    mutate(
+      match_level = factor(match_level, levels = c("full", "both", "donor", "acceptor"))
+    ) |>
+    # Canonical transcript first, then best match level, then closest match
+    arrange(dplyr::desc(is_canonical), match_level, distance, tx_id) |>
+    dplyr::select(
+      tx_id, tx_name, is_canonical, match_level, 
+      donor_offset, acceptor_offset, distance,
+      donor_match, acceptor_match, pair_match
+    )
+  
+  if (nrow(result) == 0) {
+    cat("No transcript found for", junction, "(type =", type,
+        ", tolerance =", tolerance, "). Give a larger tolerance a try.\n")
+  }
+  
+  result
+}
+```
+
 
 # Pseudobulk differential expression
 
@@ -848,6 +1019,23 @@ Mean expression (log scale) against the log2 fold change (ALS vs Ctrl) per junct
 #| fig-height: 5
 print_tabset(ma_plots)
 ```
+```{r}
+#| label: chunk-xx-save-maplots
+# I need those of GFAP and ANXA11 for the thesis, so save them
+p_ma_gfap <- ma_plots$GFAP
+p_ma_anxa11 <- ma_plots$ANXA11
+
+save_plot(
+    p_ma_gfap, "maplot_gfap", width = 8, height = 6,
+    figure = "F6A", add_tag = TRUE, legend_pos_grob = "top"
+    )
+save_plot(
+    p_ma_anxa11, "maplot_anxa11", width = 8, height = 6,
+    figure = "F6B", add_tag = TRUE
+    )
+
+```
+
 
 ## Dotplots of the top junctions
 
@@ -954,6 +1142,39 @@ print_tabset(junction_plots_gfap)
 
 junction_plots_anxa11 <- gene_junction_plots$ANXA11
 print_tabset(junction_plots_anxa11)
+```
+
+```{r}
+#| label: chunk-xx-dispaly-significant-gfap-junction
+
+gene <- "GFAP"
+junction <- "chr17:44905781:44908063"
+junction_file <- str_replace_all(junction, ":", "_")
+
+exons_gene <- get_gene_exons(edb, gene)
+
+# Canonical
+ref_list <- reference_structure(gene, exons_gene)
+p_junction <- visualize_junction(
+  ref_list, 
+  gene, 
+  junction = junction, 
+  exons_gene = exons_gene
+  )
+save_plot(
+    p_junction, paste0("junction_", gene, "_", junction_file, "_can"), 
+      width = 10, height = 4, apply_theme = FALSE
+    )
+
+
+tx_hits <- which_known_transcript(junction, exons_gene, 
+                                  type = "acceptor", tolerance = 0)
+tx_hits
+nrow(tx_hits)
+ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1],
+                                include_utr = TRUE) # no UTR available
+visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene)
+
 ```
 
 # Session info
