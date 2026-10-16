@@ -1,0 +1,595 @@
+---
+title: "Trajectory inference with Monocle3"
+author: "Niels Boersbroek"
+date: "October 2, 2026"
+format: 
+  html:
+    toc: true
+    theme: materia
+    embed-resources: true
+---
+
+<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
+
+# Trajectory inference with Monocle3
+
+This script runs Monocle3, a trajectory inference tool that scores consistently high in benchmark papers, on the clustered astrocyte Seurat object. I use the clustered object because the untrustworthy clusters have already been removed there. The Seurat object is converted to a `cell_data_set`, a trajectory graph is learned on the astrocyte UMAP, and pseudotime is calculated from a chosen root. Afterwards I run additional Monocle3 tests (`graph_test()`, gene modules, pseudotime per condition) to find genes that change along the trajectory.
+
+<!-- [ADD] Extend this intro: how does this relate to 03_trajectory_slingshot.qmd (same question, different tool)? What do you hope to compare? -->
+
+```{r}
+#| label: chunk-01-setup
+#| include: false
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Preparation
+
+## Prerequisites
+
+This script was run with the *conda environment* `r_monocle3`.
+
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
+setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- "04_trajectory_monocle3"
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+```{r}
+#| label: chunk-02-packages
+
+library(tidyverse)
+library(here)
+library(knitr)
+library(Seurat)
+library(monocle3)
+library(SeuratWrappers) # for as.cell_data_set()
+# [ADD] Explicitly loaded (monocle3 attaches it anyway) because I use
+# reducedDim() directly. Explicit is better than relying on side effects.
+library(SingleCellExperiment)
+
+```
+
+```{r}
+#| label: chunk-03-directories
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
+
+## Data directory
+dir_data <- file.path(dir_home, "data/processed")
+
+## Results directories
+# Create subfolders with the name of this script, so all figures/tables of
+# this script are in the same place
+folder_name <- knitr::current_input(dir = FALSE)
+folder_name <- str_remove(folder_name, "\\.\\w*$")
+dir_fig <- file.path(dir_home, "results/figures", folder_name)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+dir_tab <- file.path(dir_home, "results/tables", folder_name)
+dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+
+```{r}
+#| label: chunk-04-defining-variables
+# Input: clustered astrocyte Seurat object (made in 02_clustering.qmd)
+file_seurat <- "seu_shortread_astros_clustered.rds"
+
+# Dimensionality reduction from the Seurat object to build the trajectory on.
+# sce requires it as uppercase
+reduction_seurat <- "umap"
+reduction_cds <- toupper(reduction_seurat)
+
+# Metadata column used to colour the trajectory plots
+col <- "cluster"
+
+# Root principal point for pseudotime, change after running it
+root_node <- "Y_348"
+
+# Settings for the additional tests
+n_cores <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = 1))
+min_expr_fraction <- 0.05  # only test genes expressed in >= 5% of cells
+q_cutoff <- 0.05           # q-value threshold for graph_test()
+morans_cutoff <- 0.25      # [CHANGE] arbitrary starting value; inspect the
+                           # distribution of morans_I before choosing one
+condition_col <- "Condition" # [CHANGE] name of the ALS vs control column
+genes_of_interest <- c("GFAP", "AQP4") # [CHANGE] placeholder genes
+```
+
+## Helper functions
+
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
+### theme_quarto() and theme_manuscript()
+
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+
+```{r}
+#| label: chunk-06-helper-themes
+theme_quarto <- function(
+    legend_position = "right", 
+    plot_title = element_blank()
+    ) {
+    theme(
+      plot.title = plot_title,
+      legend.position = legend_position
+    )
+}
+
+theme_manuscript <- function(
+    legend_position = "none",
+    plot_title = element_blank(),
+    axis_title_size = 8,
+    axis_text_size = 6
+    ) {
+    theme(
+      plot.title = plot_title,
+      legend.position = legend_position,
+      axis.title = element_text(size = axis_title_size),
+      axis.text = element_text(size = axis_text_size),
+      legend.key.size = unit(0.4, "cm"), 
+      legend.text = element_text(size = 8),
+      legend.title = element_text(size = 9)
+    )
+}
+
+```
+
+### save_plot()
+
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
+
+The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
+
+A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
+
+```{r}
+#| label: chunk-05-helper-save-plot
+save_plot <- function(
+    p, filename, 
+    width = 10, height = 6, 
+    figure = NULL, grob = TRUE, apply_theme = TRUE, 
+    add_tag = TRUE, tag_text_size = 14,
+    legend_pos_manuscript = "none"
+    ) {
+  ## Save image on disk as png and pdf
+  # Add Quarto-specific theme, unless the plot has its own custom theme
+  if (apply_theme) {
+    p_image <- p + theme_quarto()
+  } else {
+    p_image <- p
+  }
+  file_png <- file.path(dir_fig, paste0(filename, ".png"))
+  ggsave(file_png, p_image, width = width, height = height, dpi = 150)
+  file_pdf <- file.path(dir_fig, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p_image, width = width, height = height, dpi = 150)
+  
+  ## Save the ggplot object on disk as an rds file 
+  if (!is.null(figure)) {
+    # Add tag if needed
+    if (add_tag) {
+      tag <- str_extract(figure, "[A-Z]$")
+      p <- p + 
+        labs(tag = tag) + 
+        theme(
+          plot.tag = element_text(
+            face = "bold", 
+            size = tag_text_size, 
+            hjust = 0, vjust = 0
+            )
+        )
+    }
+    # Add manuscript-specific theme, unless the plot has its own custom theme
+    if (apply_theme) {
+      p <- p + theme_manuscript(legend_pos_manuscript)
+    }
+    file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+    # Convert the object to a grob if needed
+    if (grob) {
+      p <- ggplotGrob(p)
+    }
+    # Save on disk
+    saveRDS(p, file_rds)
+  }
+}
+```
+
+
+<!-- [Add any additional, script-specific helper functions here as their own
+### function_name() subsection, following the same pattern as save_plot() above.
+Remember to move the closing </details> tag below, to after your last helper function.] -->
+
+</details>
+
+# Convert the Seurat object to a cell_data_set
+
+I load the clustered astrocyte Seurat object. To check that the conversion worked, I first plot the UMAP from the Seurat object, so I can compare it with the UMAP Monocle3 uses later.
+
+```{r}
+#| label: chunk-07-load-seurat
+seu <- readRDS(file.path(dir_data, file_seurat))
+```
+
+```{r}
+#| label: fig-01-seurat-umap
+#| fig-cap: "UMAP of the astrocytes as made in Seurat, used as reference for the Monocle3 UMAP."
+# [CHECK] save_plot() applies theme_quarto(), which removes the legend by
+# default. For this plot (what do the colours mean?) that might not be what you
+# want. Options: add a legend_position argument to save_plot(), or ggsave()
+# directly. Which do you prefer, given that the helper is shared by all scripts?
+p_seurat_umap <- DimPlot(
+  seu,
+  reduction = reduction_seurat
+)
+p_seurat_umap
+```
+
+```{r}
+#| label: chunk-08-save-seurat-umap
+#| echo: false
+save_plot(p_seurat_umap, "seurat_umap_annotation")
+```
+
+Next, I convert the object to a `cell_data_set`. I made dimensionality reductions specifically for the astrocyte subset, so I check whether my astrocyte UMAP has been transferred correctly. `learn_graph()` cannot take a specific reduction as an argument, and only grabs `"UMAP"` by default. A simple solution is to copy the coordinates of the astrocyte UMAP into `"UMAP"`.
+
+```{r}
+#| label: chunk-09-convert-to-cds
+cds <- as.cell_data_set(seu)
+
+# Check which reduced dimensions have been transferred
+reducedDims(cds)
+
+# Overwrite the default "UMAP" with the astrocyte UMAP
+reducedDim(cds, "UMAP") <- reducedDim(cds, reduction_cds)
+
+# [ADD] Verify the copy with a one-line check (e.g. identical() or all.equal()
+# on the two matrices). Why is it better to *test* this than to trust that the
+# line above worked?
+```
+
+# Partitions and clusters
+
+Monocle3 trajectory inference does not require clustering, but it does need *partitions*, which are found with `cluster_cells()`. In short, each partition becomes a separate trajectory. When I used the pre-QC astrocytes (including mixed-lineage cells), `cluster_cells()` separated the mixed-lineage cells from the 'pure' astrocytes. I assume that with the post-QC astrocytes it will find a single partition.
+
+```{r}
+#| label: chunk-10-cluster-cells
+cds <- cluster_cells(cds)
+
+# Check whether there is indeed only one partition
+table(partitions(cds))
+```
+
+```{r}
+#| label: fig-02-partitions
+#| fig-cap: "Monocle3 partitions on the astrocyte UMAP."
+p_partitions <- plot_cells(
+  cds,
+  color_cells_by = "partition",
+  show_trajectory_graph = FALSE # Otherwise it displays a previous graph
+)
+p_partitions
+```
+
+```{r}
+#| label: chunk-11-save-partitions
+#| echo: false
+save_plot(p_partitions, "monocle3_plot_partitions")
+```
+
+Just out of curiosity, I also plot the Monocle3 clusters, to see whether they agree with the Seurat clusters.
+
+```{r}
+#| label: fig-03-clusters
+#| fig-cap: "Monocle3 clusters on the astrocyte UMAP."
+p_clusters <- plot_cells(
+  cds,
+  color_cells_by = "cluster",
+  show_trajectory_graph = FALSE
+)
+p_clusters
+```
+
+```{r}
+#| label: chunk-12-save-clusters
+#| echo: false
+save_plot(p_clusters, "monocle3_plot_cluster")
+```
+
+# Learning the trajectory graph
+
+A single line of code infers the trajectory.
+
+```{r}
+#| label: chunk-13-learn-graph
+cds <- learn_graph(cds)
+```
+
+I colour by `col`, defined at the top, so I can easily change it later (for example, if I make an annotation column in Seurat and want to use that here). The first plot shows the trajectory and where it branches.
+
+```{r}
+#| label: fig-04-trajectory
+#| fig-cap: "Monocle3 trajectory on the astrocyte UMAP, with leaves and branch points labelled."
+p_trajectory <- plot_cells(
+  cds,
+  color_cells_by = col,
+  label_cell_groups = FALSE,
+  label_leaves = TRUE,
+  label_branch_points = TRUE,
+  graph_label_size = 2
+)
+p_trajectory
+```
+
+```{r}
+#| label: chunk-14-save-trajectory
+#| echo: false
+save_plot(p_trajectory, paste0("monocle3_traj_", col))
+```
+
+The second plot also shows the principal points. I use these to select where pseudotime should start.
+
+```{r}
+#| label: fig-05-principal-points
+#| fig-cap: "Monocle3 trajectory with principal points labelled, used to select the pseudotime root."
+p_principal_points <- plot_cells(
+  cds,
+  color_cells_by = col,
+  label_cell_groups = FALSE,
+  label_leaves = TRUE,
+  label_branch_points = TRUE,
+  graph_label_size = 2,
+  label_principal_points = TRUE # Needed to choose the root
+)
+p_principal_points
+```
+
+```{r}
+#| label: chunk-15-save-principal-points
+#| echo: false
+save_plot(p_principal_points, paste0("monocle3_pp_", col))
+```
+
+I save the `cds` object on disk, so I can examine later which principal points are interesting.
+
+```{r}
+#| label: chunk-16-save-cds
+saveRDS(cds, file.path(dir_data, "seu_shortread_monocle3_cds.rds"))
+```
+
+# Pseudotime
+
+## Pseudotime for every principal point
+
+To decide where pseudotime should start, I make a figure for every principal point and collect them in a single PDF (instead of one `.png` per principal point). This is certainly not the most elegant approach, but it works for now. The plots in this PDF are not displayed in the HTML output.
+
+```{r}
+#| label: chunk-17-pseudotime-all-roots
+principal_point_names <- colnames(cds@principal_graph_aux[["UMAP"]]$dp_mst)
+
+pdf(file = file.path(dir_fig, "monocle3_pseudotime.pdf"))
+for (pp in principal_point_names) {
+  # [CHANGED] In the .R script, `cds` was overwritten in every iteration, so
+  # after the loop `cds` held the pseudotime of the *last* root. Now I use a
+  # temporary object so `cds` stays untouched.
+  cds_tmp <- order_cells(cds, root_pr_nodes = pp)
+
+  p <- plot_cells(
+    cds_tmp,
+    color_cells_by = "pseudotime",
+    label_cell_groups = FALSE,
+    label_leaves = TRUE,
+    label_branch_points = TRUE,
+    graph_label_size = 2
+  ) +
+    labs(title = paste0("Pseudotime for root ", pp))
+  print(p) # print() is needed inside a loop
+}
+dev.off()
+```
+
+## Pseudotime from the chosen root
+
+After inspecting the principal points and the PDF, I pick one root (`root_node`, defined at the top) and calculate pseudotime from it.
+
+```{r}
+#| label: chunk-18-order-cells
+cds <- order_cells(cds, root_pr_nodes = root_node)
+```
+
+```{r}
+#| label: fig-06-pseudotime
+#| fig-cap: "Monocle3 pseudotime from the chosen root principal point."
+# [CHECK] theme_quarto() removes the legend, but for pseudotime the colour
+# scale *is* the information. Same question as in fig-01.
+p_pseudotime <- plot_cells(
+  cds,
+  color_cells_by = "pseudotime",
+  label_cell_groups = FALSE,
+  label_leaves = TRUE,
+  label_branch_points = TRUE,
+  graph_label_size = 2
+)
+p_pseudotime
+```
+
+```{r}
+#| label: chunk-19-save-pseudotime
+#| echo: false
+save_plot(p_pseudotime, "monocle3_pseudotime_root")
+```
+
+# Additional tests: genes that change along the trajectory
+
+<!-- [ADD] FIRST ATTEMPT, UNTESTED. This whole section is new code. Run it
+chunk by chunk, read the error messages and fix them yourself. Likely failure
+points are marked with [CHECK]. -->
+
+Monocle3 offers `graph_test()` (note: not `test_graph()`), which uses Moran's *I* to test whether a gene's expression is spatially autocorrelated on the trajectory graph. A high Moran's *I* means that cells close to each other on the trajectory have similar expression, so the gene varies along the trajectory.
+
+## Preparing the cds for testing
+
+A `cell_data_set` made from a Seurat object may lack size factors, and `graph_test()` needs them. I also restrict the test to genes expressed in at least `min_expr_fraction` of cells, to reduce runtime and the multiple-testing burden.
+
+```{r}
+#| label: chunk-20-prepare-tests
+# [CHECK] as.cell_data_set() should set gene_short_name; if not, add it
+if (!"gene_short_name" %in% colnames(rowData(cds))) {
+  rowData(cds)$gene_short_name <- rownames(cds)
+}
+
+# [CHECK] Does the cds contain raw counts? Look at counts(cds)[1:5, 1:5]
+cds <- estimate_size_factors(cds)
+
+# Fraction of cells expressing each gene
+expr_fraction <- Matrix::rowMeans(counts(cds) > 0)
+genes_test <- names(expr_fraction)[expr_fraction >= min_expr_fraction]
+length(genes_test)
+```
+
+## graph_test()
+
+```{r}
+#| label: chunk-21-graph-test
+# [CHECK] This can take long. Run it as a SLURM job with multiple cores rather
+# than in RStudio. neighbor_graph = "principal_graph" tests variation along the
+# trajectory; "knn" would test variation between neighbouring cells instead.
+graph_test_res <- graph_test(
+  cds[genes_test, ],
+  neighbor_graph = "principal_graph",
+  cores = n_cores
+)
+
+graph_test_res <- graph_test_res %>%
+  rownames_to_column("gene") %>%
+  arrange(q_value, desc(morans_I))
+
+# Use write_csv2, as my Microsoft Office with Dutch settings prefers ";" as sep
+write_csv2(graph_test_res, file.path(dir_tab, "graph_test_results.csv"))
+```
+
+```{r}
+#| label: chunk-22-graph-test-significant
+# [CHANGE] Look at the distribution of morans_I before trusting morans_cutoff:
+# summary(graph_test_res$morans_I)
+genes_sig <- graph_test_res %>%
+  filter(q_value < q_cutoff, morans_I > morans_cutoff) %>%
+  pull(gene)
+
+length(genes_sig)
+kable(head(graph_test_res, 10))
+```
+
+The top genes (by Moran's *I*) are plotted on the trajectory.
+
+```{r}
+#| label: fig-07-top-genes
+#| fig-cap: "Expression of the top 6 genes by Moran's I along the Monocle3 trajectory."
+genes_top <- graph_test_res %>%
+  filter(q_value < q_cutoff) %>%
+  slice_max(morans_I, n = 6) %>%
+  pull(gene)
+
+p_top_genes <- plot_cells(
+  cds,
+  genes = genes_top,
+  show_trajectory_graph = FALSE,
+  label_cell_groups = FALSE
+)
+p_top_genes
+```
+
+```{r}
+#| label: chunk-23-save-top-genes
+#| echo: false
+save_plot(p_top_genes, "monocle3_top_genes", width = 12, height = 8)
+```
+
+## Gene modules
+
+I group the significant genes into modules of genes with similar behaviour along the trajectory.
+
+```{r}
+#| label: chunk-24-gene-modules
+# [CHECK] find_gene_modules() needs gene loadings from preprocess_cds(), which
+# is not present in a cds converted from Seurat. I run it on a *copy*, so the
+# PCA stored in `cds` (transferred from Seurat) is not overwritten.
+cds_modules <- preprocess_cds(cds[genes_sig, ], num_dim = 50)
+
+# [CHANGE] resolution is arbitrary here; try a few values and compare.
+gene_module_df <- find_gene_modules(cds_modules, resolution = 1e-2,
+                                    cores = n_cores)
+
+write_csv2(gene_module_df, file.path(dir_tab, "monocle3_gene_modules.csv"))
+table(gene_module_df$module)
+```
+
+```{r}
+#| label: fig-08-gene-modules
+#| fig-cap: "Aggregated expression of each Monocle3 gene module on the astrocyte UMAP."
+p_gene_modules <- plot_cells(
+  cds,
+  genes = gene_module_df,
+  show_trajectory_graph = FALSE,
+  label_cell_groups = FALSE
+)
+p_gene_modules
+```
+
+```{r}
+#| label: chunk-25-save-gene-modules
+#| echo: false
+save_plot(p_gene_modules, "monocle3_gene_modules", width = 12, height = 8)
+```
+
+# Session info
+
+I used the conda environment `r_monocle3` to run this script. You can find major package versions in the file `/environments/r_monocle3.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+
+```{r}
+#| label: chunk-99-sessioninfo
+sessionInfo()
+```
