@@ -33,7 +33,13 @@ dependencies:
 
 # For script 07_hdwgcna.R
 - r-wgcna=1.74
-- r-devtools # To install hdWGCNA
+
+# devtools to install hdWGCNA, which I did with 
+# devtools::install_github('smorabit/hdWGCNA', ref='dev'),
+# as explained in the README
+- r-devtools
+# The following packages are needed for hdWGCNA, but not
+# automatically installed
 - bioconductor-ucell
 - bioconductor-genomicranges
 - bioconductor-geneoverlap
@@ -47,3 +53,4 @@ dependencies:
 - r-knitr
 - quarto
 - r-reticulate
+- r-ggrastr
