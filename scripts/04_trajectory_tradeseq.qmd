@@ -69,6 +69,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 library(tidyverse)
 library(patchwork)
+library(ggrastr)
 library(slingshot)
 library(tradeSeq)
 library(Seurat)
@@ -152,19 +153,13 @@ theme_manuscript <- function(
     legend_position = "none",
     plot_title = element_blank(),
     axis_title_size = 8,
-    axis_text_size = 6, 
-    tag_text_size = 14
+    axis_text_size = 6
     ) {
     theme(
       plot.title = plot_title,
       legend.position = legend_position,
       axis.title = element_text(size = axis_title_size),
       axis.text = element_text(size = axis_text_size),
-      plot.tag = element_text(
-        face = "bold", 
-        size = tag_text_size, 
-        hjust = 0, vjust = 0
-        ),
       legend.key.size = unit(0.4, "cm"), 
       legend.text = element_text(size = 8),
       legend.title = element_text(size = 9)
@@ -186,7 +181,8 @@ A live ggplot object carries its underlying data along with it — for plots bui
 save_plot <- function(
     p, filename, 
     width = 10, height = 6, 
-    figure = NULL, grob = TRUE, apply_theme = TRUE, add_tag = TRUE,
+    figure = NULL, grob = TRUE, apply_theme = TRUE, 
+    add_tag = TRUE, tag_text_size = 14,
     legend_pos_manuscript = "none"
     ) {
   ## Save image on disk as png and pdf
@@ -207,11 +203,18 @@ save_plot <- function(
     if (add_tag) {
       tag <- str_extract(figure, "[A-Z]$")
       p <- p + 
-        labs(tag = tag)
+        labs(tag = tag) + 
+        theme(
+          plot.tag = element_text(
+            face = "bold", 
+            size = tag_text_size, 
+            hjust = 0, vjust = 0
+            )
+        )
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript()
+      p <- p + theme_manuscript(legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -300,13 +303,13 @@ Two options as input for genes:
 2. a manual list of genes
 Choose the option with `printable_results_input = TRUE/FALSE`
 
-You also need to provide an sce and counts object for PlotSmoothers and a Seurat object for the feature plots
+You also need to provide an sce and counts object for PlotSmoothers and a Seurat object for the feature plots. I also added a rasterize argument in case the plot needs to be rastered; I need this for plots I'll use in my report.
 
 ```{r}
 #| label: chunk-xx-helper-plot-topgenes
 plot_topgenes <- function(gene_input, sce = NULL, counts = NULL, 
                           seu = NULL, n_genes = 10, ncol = 5, linewidth = 0.4,
-                          printable_results_input = TRUE) {
+                          printable_results_input = TRUE, rasterize = FALSE) {
   if (is.null(sce) | is.null(counts) | is.null(seu)) {
     stop("You did not provide an sce, counts and/or Seurat object")
   }
@@ -329,7 +332,13 @@ plot_topgenes <- function(gene_input, sce = NULL, counts = NULL,
       gene = gene,
       alpha = 0.1, size = 0.5, lwd = linewidth
       ) +
-      labs(title = gene)
+      labs(title = gene) +
+      guides(
+        color = guide_legend(override.aes = list(alpha = 1, size = 2))
+        )
+    if (rasterize) {
+      p_smooth <- ggrastr::rasterize(p_smooth, layers = "Point", dpi = 300)
+    }
      plot_list[[gene]] <- p_smooth
   }
   p_smoothers <- wrap_plots(
@@ -629,13 +638,73 @@ for (lineage in 1:3) {
     gene_sets[top_pathways], 
     stats = gene_scores, 
     fgseaRes = gsea_res, 
-    pathwayLabelStyle = list(size = 9),
+    pathwayLabelStyle = list(size = 6),
+    valueStyle = list(size = 6),
     gseaParam = 0.5 # Makes the figure clearer
     )
   plots_gsea[[lineage]] <- p_gsea
 }
 
 ```
+```{r}
+#| label: chunk-xx-go-terms-for-manuscript
+#| # Run it again but with increased font size
+plots_gsea <- list()
+# Run fgsea for each lineage. Store results and plot
+for (lineage in 1:3) {
+  gene_scores <- prepare_gsea(
+    res_svse,
+    lineage = lineage,
+    sort = "logfc"
+    )
+  
+  gsea_res <- fgsea(
+    pathways = gene_sets, # List of gene sets to check
+    stats = gene_scores,
+    scoreType = 'std', # std as we have both pos and neg rankings
+    minSize = 10, # otherwise I only get pathways with 2-5 genes
+    maxSize = 500,
+  )
+  file_csv <- file.path(dir_tab, paste0("goterms_svse_lin", lineage, ".csv"))
+  # write_csv won't work for the last column, as it's a list column
+  gsea_res |>
+     mutate(leadingEdge = map_chr(leadingEdge, str_c, collapse = ";")) |>
+     write_csv(file_csv)
+  
+  ## Create a visualization
+  top_pathways <- gsea_pathway_selection(
+    gsea_res, 
+    n_up = number_of_top_pathways_up,
+    n_down = number_of_top_pathways_down
+    )
+  p_gsea <- plotGseaTable(
+    gene_sets[top_pathways], 
+    stats = gene_scores, 
+    fgseaRes = gsea_res,
+    headerLabelStyle = list(size = 14),
+    pathwayLabelStyle = list(size = 12),
+    valueStyle = list(size = 10),
+    gseaParam = 0.5 # Makes the figure clearer
+    )
+  plots_gsea[[lineage]] <- p_gsea
+}
+
+patch <- plots_gsea[[1]] / plots_gsea[[2]] / plots_gsea[[3]] +
+  plot_annotation(
+    tag_levels = "A", 
+    theme = theme(
+        plot.tag = element_text(
+          face = "bold", 
+          size = 14, 
+          hjust = 0, vjust = 0
+          )
+      )
+    )
+save_plot(patch, "mrp_supfig10", width = 17, height = 20,
+          apply_theme = FALSE)
+```
+
+
 ### Lineage 1
 
 ```{r}
@@ -771,54 +840,6 @@ p_umap <- plots_pat$feature_umap
 p_umap
 ```
 
-## predictSmooth()
-
-```{r}
-#| label: fig-xx-predict-smooth
-
-library(ComplexHeatmap)
-library(circlize)
-
-# 1. Gene selection: top N per lineage, union across lineages
-n_heat <- 30
-genes_heat <- list(printable_lin1, printable_lin2, printable_lin3) |>
-  map(\(x) x |> slice_head(n = n_heat) |> pull(gene)) |>
-  unlist() |>
-  unique()
-
-# 2. Smoothed expression: matrix of genes x (lineage * nPoints)
-smooth_mat <- predictSmooth(
-  sce_tradeseq,
-  gene = genes_heat,
-  nPoints = 100,
-  tidy = FALSE
-)
-colnames(smooth_mat)[1:3]  # check how the columns are named
-
-# 3. log-transform and z-score per gene, jointly across all lineages
-#    so that levels are comparable between lineages
-smooth_z <- smooth_mat |>
-  log1p() |>
-  t() |> scale() |> t()
-
-# 4. Column annotation: which lineage each column belongs to
-lineage_cols <- str_extract(colnames(smooth_z), "^lineage\\d+")
-
-ht <- Heatmap(
-  smooth_z,
-  name = "z-score",
-  col = colorRamp2(c(-2, 0, 2), c("navy", "white", "firebrick")),
-  cluster_columns = FALSE,               # columns are ordered by pseudotime
-  column_split = lineage_cols,
-  show_column_names = FALSE,
-  cluster_rows = TRUE,
-  show_row_names = TRUE,
-  row_names_gp = grid::gpar(fontsize = 6),
-  column_title_gp = grid::gpar(fontsize = 10)
-)
-ht
-```
-
 ## Known markers
 
 ```{r}
@@ -829,25 +850,32 @@ plots_mark <- plot_topgenes(
   genes_rea,
   sce_tradeseq, counts, seu,
   printable_results_input = FALSE,
-  ncol_smoothers = 4
+  ncol = 4,
+  raster = TRUE
   )
 
 p_smoothers <- plots_mark$smoothers
 p_smoothers
+
+# I will save this directly to disk as supplementary figure 8
+save_plot(p_smoothers, "mrp_supfig8", width = 17, height = 12, 
+          apply_theme = FALSE)
 ```
 
 ```{r}
-#| label: fig-xx-pattern-test-top-pca
+#| label: fig-xx-known-markers-top-pca
 p_pca <- plots_mark$feature_pca
 p_pca
 ```
 
 ```{r}
-#| label: fig-xx-pattern-test-top-umap
+#| label: fig-xx-known-markers-top-umap
 p_umap <- plots_mark$feature_umap
 p_umap
 ```
 
+
+## Figures for manuscript
 
 ```{r}
 #| label: chunk-xx-figures-for-manuscript
@@ -856,109 +884,105 @@ p_umap
 
 p_smooth_gpc5 <- plotSmoothers(
       sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
+      alpha = 0.1, size = 0.1, lwd = 0.4,
       gene = "GPC5"
-    ) +
+    )  + 
+  theme_manuscript() +
   labs(title = "GPC5") +
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
+  theme(plot.title = element_text(face = "bold"))
+p_smooth_gpc5 <- ggrastr::rasterize(
+  p_smooth_gpc5, 
+  layers = "Point", 
+  dpi = 300
+  )
 # Don't add theme_manuscript in save_plot, as this one should not have a label
-p_umap_gpc5 <- FeaturePlot(seu, features = "GPC5", reduction = "umap", raster = TRUE) +
-  theme_manuscript()
+p_umap_gpc5 <- FeaturePlot(
+  seu, 
+  features = "GPC5", 
+  reduction = "umap", 
+  raster = TRUE,
+  pt.size = 4
+  ) +
+  labs(x = "UMAP1", y = "UMAP2")
+
 
 
 p_smooth_hpse2 <- plotSmoothers(
       sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = "HPSE2"
-    ) +
+      alpha = 0.1, size = 0.1, lwd = 0.4,
+      gene = "GPC5"
+    )  + 
+  theme_manuscript() +
   labs(title = "HPSE2") +
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
-p_umap_hpse2 <- FeaturePlot(seu, features = "HPSE2", reduction = "umap", raster = TRUE) +
-  theme_manuscript()
+  theme(plot.title = element_text(face = "bold"))
+p_smooth_hpse2 <- ggrastr::rasterize(
+  p_smooth_hpse2, 
+  layers = "Point", 
+  dpi = 300
+  )
+# Don't add theme_manuscript in save_plot, as this one should not have a label
+p_umap_hpse2 <- FeaturePlot(
+  seu, 
+  features = "HPSE2", 
+  reduction = "umap", 
+  raster = TRUE,
+  pt.size = 4
+  ) +
+  labs(x = "UMAP1", y = "UMAP2")
 
 # Add a title to the smoothers of the other two
 p_c3 <- plotSmoothers(
       sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = "C3",
-    ) +
-      labs(title = "C3")  +
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
+      alpha = 0.1, size = 0.1, lwd = 0.4,
+      gene = "C3"
+    )  + 
+  theme_manuscript() +
+  labs(title = "C3") +
+  theme(plot.title = element_text(face = "bold"))
+p_c3 <- ggrastr::rasterize(
+  p_c3, 
+  layers = "Point", 
+  dpi = 300
+  )
 p_vim <- plotSmoothers(
       sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = "VIM",
-    ) +
-      labs(title = "VIM")  +
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
-
-# Save to disk
-save_plot(p_smooth_gpc5, "tradeseq_gpc5_smooth", figure = "F5E")
-save_plot(p_umap_gpc5, "tradeseq_gpc5_umap", figure = "F5E_umap", tag = FALSE,
-          raster = TRUE)
-save_plot(p_smooth_hpse2, "tradeseq_hpse2_smooth", figure = "F5F")
-save_plot(p_umap_hpse2, "tradeseq_hpse2_umap", figure = "F5F_umap", tag = FALSE,
-          raster = TRUE)
-save_plot(p_c3, "tradeseq_c3", figure = "F5G", legend_position_rds = "right")
-save_plot(p_vim, "tradeseq_vim", figure = "F5H", legend_position_rds = "right")
-
-```
-
-```{r}
-#| label: chunk-xx-figures-for-manuscript-old
-# This was before I added the UMAPs
-genes_man <- c("HPSE2", "GPC5", "C3", "VIM")
-
-plots_man <- plot_topgenes(
-  genes_man,
-  sce_tradeseq, counts, seu,
-  printable_results_input = FALSE,
-  ncol = 4, 
-  linewidth = 0.8
+      alpha = 0.1, size = 0.1, lwd = 0.4,
+      gene = "VIM"
+    )  + 
+  theme_manuscript() +
+  labs(title = "VIM") +
+  theme(plot.title = element_text(face = "bold"))
+p_vim <- ggrastr::rasterize(
+  p_vim, 
+  layers = "Point", 
+  dpi = 300
   )
 
-p_smoothers <- plots_man$smoothers
-p_smoothers
+
+
+# Save to disk
+save_plot(p_c3, "tradeseq_c3", figure = "F5E", apply_theme = FALSE)
+save_plot(p_vim, "tradeseq_vim", figure = "F5F", apply_theme = FALSE)
+save_plot(p_smooth_gpc5, "tradeseq_gpc5_smooth", figure = "F5G",
+          apply_theme = FALSE)
+save_plot(p_umap_gpc5, "tradeseq_gpc5_umap", figure = "F5G_umap", 
+          add_tag = FALSE)
+save_plot(p_smooth_hpse2, "tradeseq_hpse2_smooth", figure = "F5H", 
+          apply_theme = FALSE)
+save_plot(p_umap_hpse2, "tradeseq_hpse2_umap", figure = "F5H_umap",
+          add_tag = FALSE)
+
+p_leg <- p_vim  +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 10)
+    ) +
+    guides(color = guide_legend(nrow = 1, override.aes = list(alpha = 1, size = 2)))
+leg <- cowplot::get_legend(p_leg)
+saveRDS(leg, file.path(dir_man, "F5legend.rds"))
 
 ```
 
-```{r}
-#| label: chunk-xx-figures-presentation
-
-genes <- c("C3", "VIM", "GPC5", "HPSE2")
-
-for (gene in genes) {
-  p_smooth <- plotSmoothers(
-      sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = gene,
-    ) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 1)))
-  
-  file_name <- paste0("presentation_smooth_", gene)
-  save_plot(p_smooth, file_name, width = 2.5, height = 3, apply_theme = FALSE)
-}
-
-
-p_c3 <- plotSmoothers(
-      sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = "C3",
-    ) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
-p_vim <- plotSmoothers(
-      sce_tradeseq, counts, 
-      alpha = 0.1, size = 0.5, lwd = 0.8,
-      gene = "VIM",
-    ) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
-
-save_plot(p_c3, "presentation_smoother_c3", width = 4, height = 6,
-          apply_theme = FALSE)
-save_plot(p_vim, "presentation_smoother_vim", width = 4, height = 6,
-          apply_theme = FALSE)
-
-```
 
 
 

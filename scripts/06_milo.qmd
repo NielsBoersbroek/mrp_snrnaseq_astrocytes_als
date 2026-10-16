@@ -52,7 +52,7 @@ dir_data <- file.path(dir_home, "data/processed")
 ## Results directories
 # Create subfolders with the name of this script, so all figures/tables of
 # this script are in the same place
-folder_name <- "05_milo"
+folder_name <- "06_milo"
 dir_fig <- file.path(dir_home, "results/figures", folder_name)
 dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
 dir_tab <- file.path(dir_home, "results/tables", folder_name)
@@ -68,6 +68,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 #| label: chunk-02-packages
 
 library(tidyverse)
+library(ggrastr)
 library(Seurat)
 library(miloR)
 library(SingleCellExperiment)
@@ -202,7 +203,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript()
+      p <- p + theme_manuscript(legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -365,7 +366,7 @@ change, and can kind-of be considered like the resolution of a clustering algori
 The neighborhood graph is needed to map the results to an embedding. Each
 node will represent a neighbourhood and each edge indicates the number of
 cells the neighbourhouds have in common.
-milo <- buildNhoodGraph(milo)
+
 
 ```{r}
 #| label: chunk-xx-group-hoods
@@ -382,26 +383,60 @@ The alpha is the FDR significance threshold (0.05 is default)
 
 ```{r}
 #| label: figure-xx-nhood-da
-p_nhood_da <- plotNhoodGraphDA(milo, da_results, alpha = 0.05)
+p_nhood_da <- plotNhoodGraphDA(
+  milo, 
+  da_results, 
+  alpha = 0.05,
+  size_range = c(1, 5)
+  )
+p_nhood_da$layers[[1]] <- rasterise(p_nhood_da$layers[[1]], dpi = 300)
 p_nhood_da
 ```
 
 ```{r}
 #| label: figure-xx-nhood-groups
-p_nhood_groups <- plotNhoodGroups(milo, da_results) +
+p_nhood_groups <- plotNhoodGroups(
+  milo, 
+  da_results,  
+  size_range = c(1, 5)
+  ) +
   theme(legend.position = "none")
+p_nhood_groups$layers[[1]] <- rasterise(
+  p_nhood_groups$layers[[1]], dpi = 300
+  )
 p_nhood_groups
 ```
 
 ```{r}
 #| label: figure-xx-nhood-together
-p_nhood_da + p_nhood_groups
+patch <- p_nhood_da + p_nhood_groups +
+  plot_annotation(
+    tag_levels = "A", 
+    theme = theme(
+        plot.tag = element_text(
+          face = "bold", 
+          size = 14, 
+          hjust = 0, vjust = 0
+          )
+      )
+    )
+patch
 ```
 
 ```{r}
 #| label: figure-xx-nhood-da-loose
 p_nhood_da_loose <- plotNhoodGraphDA(milo, da_results, alpha = 1)
 p_nhood_da_loose
+```
+
+```{r}
+#| label: chunk-xx-save-plots-for-manuscript
+save_plot(p_nhood_da, "milo_umap_enrichment", figure = "SF11A",
+          legend_pos_manuscript = "none")
+save_plot(p_nhood_da, "milo_umap_groups", figure = "SF11B",
+          legend_pos_manuscript = "none")
+save_plot(patch, "mrp_supfig11", height = 8, width = 17,
+          apply_theme = FALSE)
 ```
 
 # Write results to disk
@@ -411,7 +446,7 @@ I'll write both the dataframe of the results and the milo object on disk
 ```{r}
 #| label: chunk-xx-save-to-disk
 file_csv <- file.path(dir_tab, "milo_da_results.csv")
-write_csv2(da_results, file_csv)
+write_csv(da_results, file_csv)
 
 file_rds <- file.path(dir_data, "milo_shortread_astros.rds")
 saveRDS(milo, file_rds)

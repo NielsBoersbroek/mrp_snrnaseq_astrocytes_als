@@ -198,15 +198,17 @@ theme_quarto <- function(
       legend.position = legend_position
     )
 }
-
+# For this script, add the title!
 theme_manuscript <- function(
     legend_position = "none",
-    plot_title = element_blank(),
+    plot_title = element_text(size = 8, face = "bold"),
+    plot_subtitle = element_text(size = 8, face = "italic"),
     axis_title_size = 8,
     axis_text_size = 6
     ) {
     theme(
       plot.title = plot_title,
+      plot.subtitle = plot_subtitle,
       legend.position = legend_position,
       axis.title = element_text(size = axis_title_size),
       axis.text = element_text(size = axis_text_size),
@@ -264,7 +266,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript()
+      p <- p + theme_manuscript(legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -699,7 +701,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
           .default = -0.3
         ),
         yend = y,
-        y_label = y + 0.035,
+        y_label = y + 0.04,
       )
     p <- p + geom_segment(
       data = junctions_tibble,
@@ -709,7 +711,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
       geom_text(
         data = junctions_tibble,
         aes(x = middle, y = y_label, label = label),
-        size = 6, size.unit = "pt"
+        size = 8, size.unit = "pt"
       )
     # Set ylim for the next plot; needs to be different for multiple junctions
     # ylim should only be adapted if layers go below 0
@@ -1197,7 +1199,7 @@ p_junc_summary_gfap
 save_plot(
     p_junc_summary_gfap, "junction_summary_gfap", 
       width = 10, height = 4,
-    figure = "F6C", add_tag = TRUE
+    figure = "F6C"
     )
 
 ```
@@ -1227,7 +1229,7 @@ p_junc_summary_anxa
 save_plot(
     p_junc_summary_anxa, "junction_summary_anxa", 
     width = 10, height = 4,
-    figure = "F6D", , add_tag = TRUE
+    figure = "F6D"
     )
 
 ```
@@ -1267,11 +1269,10 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              xmin = xmin, xmax = xmax, 
                              junction_label = junction_to_plot_label)
 p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_exon2skip",
           width = 10, height = 4,
-          figure = "F6E", add_tag = TRUE)
+          figure = "F6E")
 
 ```
 
@@ -1332,7 +1333,7 @@ tx_hits
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1])
 p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
                              exons_gene = exons_gene, manual_margin = TRUE, 
-                             xmin = xmin, xmax = xmax, curvature_arrow = 1.5,
+                             xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
 p_junc
 
@@ -1366,7 +1367,7 @@ tx_hits
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[3])
 p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
                              exons_gene = exons_gene, manual_margin = TRUE, 
-                             xmin = xmin, xmax = xmax, curvature_arrow = 1.5,
+                             xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
 p_junc
 
@@ -1399,7 +1400,7 @@ tx_hits
 ref_list <- reference_structure(gene, exons_gene)
 p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot, 
                              exons_gene = exons_gene, manual_margin = TRUE, 
-                             xmin = xmin, xmax = xmax,
+                             xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
 p_junc
 

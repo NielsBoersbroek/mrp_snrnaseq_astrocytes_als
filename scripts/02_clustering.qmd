@@ -71,6 +71,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 library(tidyverse)
 library(patchwork)
+library(clustree)
 library(Seurat)
 library(harmony)
 library(msigdbr) # For loading in GO-terms
@@ -188,7 +189,7 @@ A live ggplot object carries its underlying data along with it — for plots bui
 #| label: chunk-05-helper-save-plot
 save_plot <- function(
     p, filename, 
-    width = 10, height = 6, 
+    width = 10, height = 6,
     figure = NULL, grob = TRUE, apply_theme = TRUE, 
     add_tag = TRUE, tag_text_size = 14,
     legend_pos_manuscript = "none"
@@ -222,7 +223,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript()
+      p <- p + theme_manuscript(legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -234,6 +235,29 @@ save_plot <- function(
   }
 }
 ```
+
+### print_tabset()
+
+Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with `print_tabset()`. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option `#| output: asis`. `heading_level` should be one deeper than the heading above the chunk.
+
+```{r}
+#| label: chunk-07-helper-print-tabset
+print_tabset <- function(obj_list, heading_level = 3) {
+  cat("::: {.panel-tabset}\n\n")
+  for (nm in names(obj_list)) {
+    cat(strrep("#", heading_level), " ", nm, "\n\n", sep = "")
+    obj <- obj_list[[nm]]
+    if (inherits(obj, "ggplot")) {
+      print(obj)
+    } else if (is.data.frame(obj)) {
+      cat(knitr::kable(obj, format = "pipe"), sep = "\n")
+    }
+    cat("\n\n")
+  }
+  cat(":::\n\n")
+}
+```
+
 
 ### variable_feature_selection()
 
@@ -392,12 +416,11 @@ boxplot_composition <- function(cell_counts, variable = "AnonymousID") {
     cell_counts_ggplot, 
     aes(x = cellstate, y= Proportion, fill = !!sym(variable))
     ) +
-    geom_boxplot() +
+    geom_boxplot(alpha = 0.7) +
     geom_point(
-      aes(group = !!sym(variable)), colour = "grey20", size = 1.5,
-      position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8)
+      aes(group = !!sym(variable)), colour = "grey20", size = 0.6,
+      position = position_jitterdodge(jitter.width = 0.4, dodge.width = 0.8)
       ) +
-#   coord_flip() +
     theme_classic()
   
   p_box
@@ -500,62 +523,102 @@ I assessed multiple clustering resolutions and chose to continue with cluster re
 
 ```{r}
 #| label: chunk-xx-clustering
+resolutions <- c(
+  0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4,
+  0.45, 0.5, 0.6, 0.8, 1.0
+)
 
-# I set the script at cluster resolution 0.2. You can change it, but that messes
-# up a lot of the rest of the script
-
-seu <- FindClusters(
+plots_clust_pca <- list()
+plots_clust_umap <- list()
+for (resolution in resolutions) {
+  seu <- FindClusters(
     seu,
-    resolution = res,
-    cluster.name = paste0("seurat_cluster_res", res),
+    resolution = resolution,
+    cluster.name = paste0("seurat_cluster_res", resolution),
     algorithm = 4 # 4 = Leiden algorithm
     )
+  title <- paste0("Resolution ", resolution)
+  p_clust_pca <- DimPlot(
+    seu, 
+    reduction = "pca", 
+    group.by = paste0("seurat_cluster_res", resolution),
+    raster = TRUE,
+    pt.size = 2,
+    label = TRUE
+  ) +
+    theme_manuscript() +
+    theme(plot.title = element_text(size = 10, face = "bold")) +
+    labs(title = title)
+  p_clust_umap <- DimPlot(
+    seu, 
+    reduction = "umap", 
+    group.by = paste0("seurat_cluster_res", resolution),
+    pt.size = 2,
+    label = TRUE
+  )  +
+    theme_manuscript() +
+    theme(plot.title = element_text(size = 10, face = "bold")) +
+    labs(title = title)
+  # Can only save resolution as a string
+  list_entry_name <- paste0("res", resolution)
+  plots_clust_pca[[list_entry_name]] <- p_clust_pca
+  plots_clust_umap[[list_entry_name]] <- p_clust_umap
+}
+```
 
-p_clust_pca <- DimPlot(
-  seu, 
-  reduction = "pca", 
-  group.by = paste0("seurat_cluster_res", res)
-)
-p_clust_umap <- DimPlot(
-  seu, 
-  reduction = "umap", 
-  group.by = paste0("seurat_cluster_res", res)
-)
-p_clust_pca + p_clust_umap + plot_layout(guides = "collect")
+```{r}
+#| label: chunk-xx-clusterings-pca
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plots_clust_pca)
+```
 
+```{r}
+#| label: chunk-xx-clusterings-umap
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plots_clust_umap)
+```
+```{r}
+#| label: fig-xx-clustree
+
+p_clustree <- clustree(seu, prefix = "seurat_cluster_res") + 
+  coord_flip()
+p_clustree 
+``` 
+
+```{r}
+#| label: chunk-xx-save-supfig3-to-disk
+#| echo: false
+p_clust_pca <- wrap_plots(
+  plots_clust_pca, 
+  ncol = 4, 
+  axes = "collect"
+  )
+p_clust_umap <- wrap_plots(
+  plots_clust_umap, 
+  ncol = 4, 
+  axes = "collect"
+  ) &
+  theme_manuscript()
+patch <- p_clust_pca / p_clust_umap / p_clustree
+save_plot(patch, "mrp_supfig3", width = 17, height = 25)
+
+```
+The three clusters defined by resolution 0.15 are robust, so I set these as the clusters to be used in the section 'Defining variables'. Set them as identity.
+
+```{r}
+#| label: chunk-xx-set-idents
+Idents(seu) <- paste0("seurat_cluster_res", res)
 ```
 
 ## Cluster interpretation and annotation
 
-I could show all steps through which I assesed the discrete clusters in chronologic order, but that would make this a very unreadable script with an incoherent narrative. Therefore, I'll first display the clusters as I annotated them, then show in a logical order (not necessarily how it happened chronologically) how I came to this annotation, and what further information I gathered on the clusters. Readers can find additional information along the way; my goal was to be as transparant as possible.
-
-Below in @fig-xx-annotated-clusters, you see that we divided white matter and grey matter astrocytes, with two white matter astrocytes. Cluster 4 will be removed.
-
-```{r}
-#| label: fig-xx-annotated-clusters
-
-seu@meta.data <- seu@meta.data |>
-  mutate(
-    annotation = case_when(
-      seurat_cluster_res0.15 == 1 ~ "WM Astrocyte 1",
-      seurat_cluster_res0.15 == 2 ~ "WM Astrocyte 2",
-      seurat_cluster_res0.15 == 3 ~ "GM Astrocyte"
-    )
-  )
-
-p_ann_pca <- DimPlot(seu, reduction = "pca", group.by = "annotation")
-p_ann_pca
-
-p_ann_umap <- DimPlot(seu, reduction = "umap", group.by = "annotation")
-p_ann_umap
-
-p_ann_pca + p_ann_umap + plot_layout(guides = "collect")
-
-```
-
 ### Removal cluster 4
 
-I remove cluster 4, because the markers of that cluster mostly were mitochondrial RNA. 
+I removed cluster 4, because the markers of that cluster mostly were mitochondrial RNA. 
 
 To find that, I first ran `FindAllMarkers()` for all clusters.
 
@@ -567,7 +630,6 @@ I used Seurat's function `FindAllMarkers()` to interpret clusters. By default, `
 #| label: chunk-xx-findmarkers
 # Run FindAllMarkers, but with very loose thresholds: I'll run GSEA of GO-terms
 # on it, which means I'll want a gene score of almost all genes
-Idents(seu) <- paste0("seurat_cluster_res", res)
 markers <- FindAllMarkers(
   seu,
   logfc.threshold = 0,
@@ -616,33 +678,25 @@ top_markers(markers, cluster_select = 3) |> knitr::kable()
 
 </details>
 
-```{r}
-#| label: chunk-xx-manuscript-fig4ab
-#| echo: false
-# None of the figures I make here truly match my manuscript figures, so I'll
-# make it in this hidden chunk
-p_ann_pca <- DimPlot(seu, reduction = "pca", group.by = "annotation") +
-  labs(x = "PC1", y = "PC2")
-p_ann_umap <- DimPlot(seu, reduction = "umap", group.by = "annotation") +
-  labs(x = "UMAP1", y = "UMAP2")
-
-save_plot(p_ann_pca, "astros_annotated_pca", figure = "F4A", 
-          legend_position_rds = "right")
-save_plot(p_ann_umap, "astros_annotated_umap", figure = "F4B", 
-          legend_position_rds = "right")
-```
-
-
 ### Grey matter-white matter astrocyte distinction
 
-Another distinction I could quickly make was a division in grey matter and white matter astrocytes. This dataset was annotated using reference atlases, and the atlas from [Allen, source] provided a white matter-grey matter astrocyte distinction. This aligns well with cluster 1 vs cluster 2 and 3. I therefore labelled cluster 1 grey matter (GM) astrocytes and cluster 2 and 3 white matter (WM) astrocytes.
+Another distinction I could quickly make was a division in grey matter and white matter astrocytes. This dataset was annotated using reference atlases, and the atlas from the Allen Brain institue provided a white matter-grey matter astrocyte distinction. This aligns well with cluster 1 vs cluster 2 and 3. I therefore labelled cluster 1 grey matter (GM) astrocytes and cluster 2 and 3 white matter (WM) astrocytes.
 
 ```{r}
 #| label: fig-xx-allen-wm-gm
+ann_cols <- c(
+  "WM Astrocytes" = "#80CDC1",
+  "GM Astrocytes"   = "#DFC27D"
+)
+
 p_allen <- DimPlot(
   seu, 
   reduction = "umap", 
-  group.by = "predicted.id_coarse_allen_group"
+  group.by = "predicted.id_coarse_allen_group",
+  cols = ann_cols,
+  pt.size = 2,
+  alpha = 1,
+  raster = TRUE
   ) +
   labs(x = "UMAP1", y = "UMAP2")
 p_allen + theme_quarto()
@@ -650,8 +704,9 @@ p_allen + theme_quarto()
 
 ```{r}
 #| label: chunk-xx-save-fig4c
+#| echo: false
 save_plot(p_allen, "astros_allen_gmwm", figure = "F4C", 
-          legend_position_rds = "right")
+          legend_pos_manuscript = "right")
 
 ```
 
@@ -671,8 +726,11 @@ gene_sets <- split(x = gs_go_bp$gene_symbol, f = gs_go_bp$gs_name)
 
 # Run GSEA for all clusters. For each cluster: save the output-table on disk and
 # create a visualization. Use a list to store all visualizations.
+# I would manually set clusters with marker_levels$cluster, so it works
+# automatically, but that would include cluster 4, still, so I'll set it
+# with 1:3
 plot_list <- list()
-for (i in marker_levels$cluster) {
+for (i in 1:3) {
   gene_scores <- prepare_gsea(
     markers, 
     findallmarkers = TRUE, 
@@ -703,77 +761,105 @@ for (i in marker_levels$cluster) {
     gene_sets[top_pathways], 
     stats = gene_scores, 
     fgseaRes = gsea_res, 
-    pathwayLabelStyle = list(size = 9),
+    headerLabelStyle = list(size = 14),
+    pathwayLabelStyle = list(size = 12),
+    valueStyle = list(size = 10),
     gseaParam = 0.5 # Makes the figure clearer
     )
   # Store the plot in the list under the name of the cluster
-  plot_list[[i]] <- p_gsea
+  list_entry_name <- paste0("Cluster ", i)
+  plot_list[[list_entry_name]] <- p_gsea
 }
 
 ```
 
-If we examine the GO terms for which cluster 3 is enriched, we see that these are GO terms such as synaptic signalling, Neurotransmitter transport and other terms associated with synapse function. Previous studies described that this describes Grey Matter astrocytes - possibly neuron-interacting?
+If we examine the GO terms for which cluster 3 is enriched, we see that these are GO terms such as synaptic signalling, Neurotransmitter transport and other terms associated with synapse function. Previous studies described that this describes neuron-interacting or Grey Matter astrocytes.
 
 ```{r}
-#| label: fig-xx-gsea-clust3
-p_gsea3 <- plot_list[[3]]
-p_gsea3
+#| label: chunk-10-display-dotplots
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plot_list)
 ```
-
-```{r}
-# Extract leading genes
-gene_scores <- prepare_gsea(
-  markers, 
-  findallmarkers = TRUE, 
-  identity = 3, 
-  sort = "logfc"
-  )
-# Run GSEA with the fgsea package
-gsea_res <- fgsea(
-  pathways = gene_sets, # List of gene sets to check
-  stats = gene_scores,
-  scoreType = 'std', # std as we have both pos and neg rankings
-  minSize = 10, # otherwise I only get pathways with 2-5 genes
-  maxSize = 500,
-)
-
-leading_genes <- gsea_res[gsea_res$pathway == "GOBP_SYNAPTIC_SIGNALING", "leadingEdge"][[1]]
-leading_genes
-
-FeaturePlot(seu, reduction = "umap", features = leading_genes[[1]][1:4])
-FeaturePlot(seu, reduction = "umap", features = leading_genes[[1]][5:14])
-# I guess it's kind of sorted by weight, but also not really, so examine these
-# plots yourself
-``` 
-
-
-
-<details>
-
-<summary>*I'll later test WM Astrocyte 1 vs WM Astrocyte 2 - this makes more sense than to examine their current results. If you want to see the GO-term results of these clusters in this test with the GM astrocytes included, click here.*</summary>
-
-```{r}
-#| label: fig-xx-gsea-clust1
-p_gsea1 <- plot_list[[1]]
-p_gsea1
-```
-
-```{r}
-#| label: fig-xx-gsea-clust2
-p_gsea2 <- plot_list[[2]]
-p_gsea2
-```
-
-</details>
 
 ```{r}
 #| label: chunk-xx-save-plots-goterm-cluster1-3
 #| echo: false
-save_plot(p_gsea1, "gsea_cluster1")
-save_plot(p_gsea2, "gsea_cluster3")
-save_plot(p_gsea3, "gsea_cluster3")
+patch <- plot_list[["Cluster 1"]] / plot_list[["Cluster 2"]] /
+ plot_list[["Cluster 3"]] +
+  plot_annotation(
+    tag_levels = "A", 
+    theme = theme(
+        plot.tag = element_text(
+          face = "bold", 
+          size = 14, 
+          hjust = 0, vjust = 0
+          )
+      )
+    )
+save_plot(patch, "mrp_supfig5", width = 17, height = 20,
+          apply_theme = FALSE)
 
 ```
+
+Altogether, I decided to label the clusters `WM Astrocyte 1`, `WM Astrocyte 2`, and GM `Astrocyte 3`
+
+
+```{r}
+#| label: fig-xx-annotation-pca
+seu@meta.data <- seu@meta.data |>
+  mutate(
+    annotation = case_when(
+      seurat_cluster_res0.15 == 1 ~ "WM Astrocyte 1",
+      seurat_cluster_res0.15 == 2 ~ "WM Astrocyte 2",
+      seurat_cluster_res0.15 == 3 ~ "GM Astrocyte"
+    )
+  )
+
+ann_cols <- c(
+  "WM Astrocyte 1" = "#01665E",
+  "WM Astrocyte 2" = "#35978F",
+  "GM Astrocyte"   = "#BF812D"
+)
+
+p_ann_pca <- DimPlot(
+  seu, 
+  reduction = "pca", 
+  group.by = "annotation",
+  cols = ann_cols,
+  pt.size = 2,
+  raster = TRUE
+  ) +
+  labs(x = "PC1", y = "PC2")
+p_ann_pca
+```
+
+```{r}
+#| label: fig-xx-annotation-umap
+p_ann_umap <- DimPlot(
+  seu, 
+  reduction = "umap", 
+  group.by = "annotation",
+  cols = ann_cols,
+  pt.size = 2,
+  raster = TRUE
+  ) +
+  labs(x = "UMAP1", y = "UMAP2")
+p_ann_umap
+
+```
+
+```{r}
+#| label: chunk-xx-annotation-pca-umap-to-disk
+#| echo: false
+
+save_plot(p_ann_pca, "astros_annotated_pca", figure = "F4A", 
+          legend_pos_manuscript = "right")
+save_plot(p_ann_umap, "astros_annotated_umap", figure = "F4B", 
+          legend_pos_manuscript = "right")
+```
+
 
 ### Astrocyte markers from literature
 
@@ -782,21 +868,28 @@ save_plot(p_gsea3, "gsea_cluster3")
 #| fig-cap: "Canonical astrocyte markers"
 mark_canonical <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 
-FeaturePlot(seu, features = mark_canonical, reduction = "umap")
-
+p_can_fea <- FeaturePlot(
+  seu, 
+  features = mark_canonical, 
+  reduction = "umap",
+  raster = TRUE,
+  pt.size = 2
+  ) &
+  NoLegend()
+p_can_fea
 ```
-```{r}
-#| label: fig-xx-markers-canonical-astrocyte-feature
-#| fig-cap: "Canonical astrocyte markers"
-mark_canonical <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 
-VlnPlot(
+```{r}
+#| label: fig-xx-markers-canonical-astrocyte-vln
+#| fig-cap: "Canonical astrocyte markers"
+p_can_vln <- VlnPlot(
   seu, 
   features = mark_canonical, 
   group.by = "annotation",
   pt.size = 0,
   stack = TRUE
   )
+p_can_vln
 
 ```
 
@@ -806,9 +899,13 @@ VlnPlot(
 mark_reactive <- c("GFAP", "VIM", "CD44", "OSMR", "TIMP1", "C3", "SERPING1",
                    "CHI3L1", "S100B", "HSPB1", "CP", "MX1", "PRDX6", "ICAM1")
 
-p_dot_rea <- DotPlot(seu, features = mark_reactive, group.by = "annotation") +
+p_rea_dot <- DotPlot(
+  seu, 
+  features = mark_reactive, 
+  group.by = "annotation"
+  ) +
   theme(axis.text.x = element_text(angle = 70, vjust = 1, hjust=1))
-p_dot_rea
+p_rea_dot
 
 ```
 
@@ -817,7 +914,7 @@ p_dot_rea
 mark_reactive <- c("GFAP", "VIM", "CD44", "OSMR", "TIMP1", "C3", "SERPING1",
                    "CHI3L1", "S100B", "HSPB1", "CP", "MX1", "PRDX6", "ICAM1")
 
-p_vln_rea <- VlnPlot(
+p_rea_vln <- VlnPlot(
   seu, 
   features = mark_reactive, 
   group.by = "annotation",
@@ -825,45 +922,50 @@ p_vln_rea <- VlnPlot(
   stack = TRUE
   ) +
   theme(axis.text.x = element_text(angle = 70, vjust = 1, hjust=1))
-p_vln_rea
+p_rea_vln
 
 ```
 
 
 ```{r}
+# Make a specific subset based on what's expressed
 features_rea <- c("C3", "SERPING1", "CHI3L1", "OSMR", "HSPB1", "PRDX6", "VIM", "CRYAB")
-p_fea_rea <- FeaturePlot(seu, reduction = "umap", features_rea)
-p_fea_rea
+p_rea_fea_umap <- FeaturePlot(
+  seu, 
+  reduction = "umap", 
+  features_rea,
+  raster = TRUE,
+  pt.size = 2,
+  ncol = 4
+  ) &
+  NoLegend()
+p_rea_fea_umap
 ```
 
 ```{r}
-#| label: chunk-xx-manuscript-fig4d
-#| eval: false
-genes_manuscript <- c("NRXN1", "SNAP25", "CRYAB", "CHI3L1", "OSMR", "HSPB1" , 
-                      "TNC", "ALPK1")
+p_rea_fea_pca <- FeaturePlot(
+  seu, 
+  reduction = "pca", 
+  features_rea,
+  raster = TRUE,
+  pt.size = 2,
+  ncol = 4
+  ) &
+  NoLegend()
+p_rea_fea_pca
+```
+```{r}
+#| label: chunk-xx-save-markers-manuscript
+#| echo: false
 
-labels <- list("D", "E", "F", "G", "H", "I", "J", "K")
-p_fea_man <- FeaturePlot(
-    seu, 
-    reduction = "umap", 
-    features = genes_manuscript, 
-    ncol = 4
-  ) +
-  plot_annotation(tag_levels = list(labels)) +
-  plot_layout(axes = "collect") & # Not Y, because of label
-  NoLegend() & 
-  theme(
-    axis.text = element_text(size = 6),
-    axis.title = element_text(size = 8),
-    axis.title.y = element_text(vjust = 5),
-    title = element_text(size = 6)
-    )
+patch <- (p_can_fea | p_can_vln) /
+  (p_rea_dot | p_rea_vln) /
+  (p_rea_fea_pca | p_rea_fea_umap) +
+  plot_annotation(tag_levels = "A")
+patch
 
-# This is a patchwork object and a bit messy, so I'm saving it manually
-p_rds <- patchworkGrob(p_fea_man)
-file_rds <- file.path(dir_man, "F4DK.rds")
-saveRDS(p_rds, file_rds)
-
+save_plot(patch, "mrp_supfig4", width = 17, heigh = 25, 
+          apply_theme = FALSE)
 ```
 
 ### WM1 vs WM2
@@ -923,91 +1025,46 @@ for (i in names(markers_wm_list)) {
     gene_sets[top_pathways], 
     stats = gene_scores, 
     fgseaRes = gsea_res, 
-    pathwayLabelStyle = list(size = 6),
+    headerLabelStyle = list(size = 14),
+    pathwayLabelStyle = list(size = 12),
+    valueStyle = list(size = 10),
     gseaParam = 0.5 # Makes the figure clearer
     )
-  # Store the plot and results table in the list under the name of the cluster
+  # Store the plot in the list under the name of the cluster
   plot_list[[i]] <- p_gsea
-  res_table_list[[i]] <- gsea_res
 }
 
 ```
 
-Examine the results of both
-
 ```{r}
-
-p_go_wm1 <- plot_list[["WM1"]]
-p_go_wm1
-
+#| label: chunk-10-display-go-terms-wm1-wm2
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plot_list)
 ```
 
 ```{r}
-
-p_go_wm2 <- plot_list[["WM2"]]
-p_go_wm2
+#| label: chunk-xx-save-plots-goterm-wm1-wm2
+#| echo: false
+patch <- plot_list[["WM1"]] / plot_list[["WM2"]] +
+  plot_annotation(
+    tag_levels = "A", 
+    theme = theme(
+        plot.tag = element_text(
+          face = "bold", 
+          size = 14, 
+          hjust = 0, vjust = 0
+          )
+      )
+    )
+save_plot(patch, "mrp_supfig6", width = 17, height = 15,
+          apply_theme = FALSE)
 
 ```
 
-Extract lists of enriched processes, so I can see everything, not just the most significant ones. Make this a 'click here' thing.
-
-```{r}
-# Extract lists of enriched processes
-gsea_res_wm1 <- res_table_list[["WM1"]]
-sig_res_wm1 <- gsea_res_wm1[gsea_res_wm1$padj < 0.05 & gsea_res_wm1$ES > 0, ]
-sig_pathways_wm1 <- sig_res_wm1$pathway
-
-gsea_res_wm2 <- res_table_list[["WM2"]]
-sig_res_wm2 <- gsea_res_wm2[gsea_res_wm2$padj < 0.05 & gsea_res_wm2$ES > 0, ]
-sig_pathways_wm2 <- sig_res_wm2$pathway
-
-sig_pathways_wm1
-sig_pathways_wm2
-```
-
-Extract the leading genes of most interesting processes (might be removed later, or just turned into an example, or into the same 'click here' think)
-
-```{r}
-#| label: chunk-xx-extract-leading-genes
-gsea_res_wm2 <- res_table_list[["WM2"]]
-leading_genes <- gsea_res_wm2[gsea_res_wm2$pathway == "GOBP_POSITIVE_REGULATION_OF_LOCOMOTION", "leadingEdge"][[1]]
-leading_genes
-
-FeaturePlot(seu, reduction = "umap", features = leading_genes[[1]][1:9])
-# I guess it's kind of sorted by weight, but also not really, so examine these
-# plots yourself
-```
-
-Plot interesting genes. First WM1
-
-```{r}
-
-mark_gm <- c("SNAP25", "NRXN1")
-
-p_gm_fea <- FeaturePlot(seu, reduction = "umap", features = mark_gm)
-p_gm_fea
-```
-Then WM2:
-Inflammatory
-```{r}
-
-mark_wm_inf <- c("ALPK1", "TNC")
-
-p_wm_inf_fea <- FeaturePlot(seu, reduction = "umap", features = mark_wm_inf)
-p_wm_inf_fea
-```
 
 
-I wanted to make these enrichment plots, but they do not really work yet...
-```{r}
-#| label: chunk-xx-test-enrichment-plot
-gene_scores <- prepare_gsea(
-  markers_wm2,
-  sort = "logfc"
-)
-
-plotEnrichment("GOBP_MAPK_CASCADE", gene_scores, gseaParam = 1, ticksSize = 0.2)
-```
 
 
 
@@ -1064,20 +1121,14 @@ for (i in names(markers_wm_list)) {
 
 
 ```{r}
-
-plot_list[["WM1"]]
-
-```
-
-```{r}
-
-plot_list[["WM2"]]
-
+#| label: chunk-10-display-go-terms-signed-logp
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plot_list)
 ```
 
 </details>
-
-## (Potentially WES enrichment)
 
 
 ## Cell composition analysis
@@ -1181,44 +1232,17 @@ Visualize with ggplot2:
 
 ```{r}
 #| label: fig-xx-cell-comp-condition
+cols_condition <- c("Ctrl" = "#0072B2", "ALS" = "#D55E00")
 
 p_bar_con <- boxplot_composition(cell_counts, variable = "condition")  +
-    theme(
-      legend.title = element_blank(),
-      legend.key.size = unit(0.4, "cm"), 
-      legend.text = element_text(size = 8)
-    )
-p_bar_con + theme_quarto(legend_position = "right")
+  scale_fill_manual(values = cols_condition) +
+  labs(x = "")
+p_bar_con + theme_quarto(legend_position = "top")
 ```
 
+<details>
 
-
-Test for AnonymousID
-
-```{python}
-#| label: chunk-xx-sccoda-anonymousid
-
-variable = "AnonymousID"
-
-model = mod.CompositionalAnalysis(
-    data, 
-    formula = variable, 
-    reference_cell_type = "automatic"
-    )
-
-results = model.sample_hmc(verbose = False)
-
-print(results.summary())
-print(results.credible_effects())
-
-```
-
-```{r}
-#| label: fig-xx-cell-comp-anonymousid
-
-p_bar_ano <- boxplot_composition(cell_counts, variable = "AnonymousID")
-p_bar_ano + theme_quarto(legend_position = "right")
-```
+<summary>*Click here to view the same test but for Gender, Primary Site of Onset, pTDP-43 Stage and disease subtype*</summary>
 
 Test for Gender
 
@@ -1243,7 +1267,7 @@ print(results.credible_effects())
 ```{r}
 #| label: fig-xx-cell-comp-gender
 
-p_bar_gen <- boxplot_composition(cell_counts, variable = "gender")
+p_bar_gen <- boxplot_composition(cell_counts, variable = "Gender")
 p_bar_gen + theme_quarto(legend_position = "right")
 ```
 
@@ -1325,13 +1349,20 @@ print(results.credible_effects())
 ```{r}
 #| label: fig-xx-cell-comp-subtype
 
-p_bar_sub <- boxplot_composition(cell_counts, variable = "disease_subtype") +
-    theme(
-      legend.title = element_blank(),
-      legend.key.size = unit(0.4, "cm"), 
-      legend.text = element_text(size = 8)
-    )
+cols_subtype <- c(
+  "ctrl" = "#0072B2",
+  "C9ALS" = "#F4B183",
+  "sALS" = "#E8864F",
+  "CFAP-ALS" = "#D55E00",
+  "FUS-ALS" = "#8F3F00"
+  )
+
+p_bar_sub <- boxplot_composition(cell_counts, variable = "disease_subtype")  +
+  scale_fill_manual(values = cols_subtype) +
+  labs(x = "") +
+  guides(fill = guide_legend(title = "Disease\nsubtype"))
 p_bar_sub + theme_quarto(legend_position = "right")
+
 ```
 
 ```{r}
@@ -1339,165 +1370,31 @@ p_bar_sub + theme_quarto(legend_position = "right")
 
 # I'll later save everything; for now, just save condition and subtype
 save_plot(p_bar_con, "cell_comp_condition", figure = "F4L",
-          legend_position_rds = "right")
+          legend_pos_manuscript = "top")
 save_plot(p_bar_sub, "cell_comp_subtype", figure = "F4M",
-          legend_position_rds = "right")
+          legend_pos_manuscript = "right")
+
+
+save_plot(p_bar_gen, "cell_comp_subtype", figure = "SF7A",
+          legend_pos_manuscript = "right")
+save_plot(p_bar_site, "cell_comp_subtype", figure = "SF7B",
+          legend_pos_manuscript = "right")
+save_plot(p_bar_tdp, "cell_comp_subtype", figure = "SF7C",
+          legend_pos_manuscript = "right")
 
 ```
+
+</details>
 
 # Save on disk
 
 
 ```{r}
 #| label: chunk-xx-save-to-disk
-file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
-saveRDS(seu, file_rds)
+# Commented for now, umcomment later
+# file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
+# saveRDS(seu, file_rds)
 ```
-
-# Figures for presentation
-
-This can be removed later
-
-```{r}
-#| label: chunk-xx-figures-for-presentation
-#| eval: false
-
-axis_text_size <- 8
-genes <- c("SNAP25", "NRXN1", "CRYAB", "CHI3L1", "OSMR", "HSPB1", "TNC", 
-           "ALPK1", "GPC5", "HPSE2")
-
-## Annotated PCA and UMAP ------------------------------------------------------
-
-# Paste your chosen option here (names must match your annotation labels exactly)
-ann_cols <- c(
-  "WM Astrocyte 1" = "#0072B2",
-  "WM Astrocyte 2" = "#56B4E9",
-  "GM Astrocyte"   = "#D55E00"
-)
-
-p_ann_pca <- DimPlot(
-  seu, 
-  reduction = "pca", 
-  group.by = "annotation", 
-  cols = ann_cols,
-  pt.size = 0.2
-  ) +
-  labs(x = "PC1", y = "PC2") +
-  theme(
-    plot.title = element_blank(),
-    axis.text = element_text(size = axis_text_size),
-    legend.position = "right"
-    )
-p_ann_umap <- DimPlot(
-  seu, 
-  reduction = "umap", 
-  group.by = "annotation", 
-  cols = ann_cols,
-  pt.size = 0.2
-  ) +
-  labs(x = "UMAP1", y = "UMAP2") +
-  theme(
-    plot.title = element_blank(),
-    axis.text = element_text(size = axis_text_size),
-    legend.position = "right"
-    )
-
-save_plot(p_ann_pca, "presentation_annotated_pca", width = 7.5, height = 6,
-          apply_theme = FALSE)
-save_plot(p_ann_umap, "presentation_annotated_umap", width = 7.5, height = 6,
-          apply_theme = FALSE)
-
-
-## Allen annotation -----------------------------------------------------------
-
-
-ann_cols <- c(
-  "WM Astrocytes" = "#2E8BC0",
-  "GM Astrocytes"   = "#E69F00"
-)
-
-p_allen <- DimPlot(
-  seu, 
-  reduction = "umap", 
-  group.by = "predicted.id_coarse_allen_group", 
-  cols = ann_cols,
-  pt.size = 0.2
-  ) +
-  labs(x = "UMAP1", y = "UMAP2") +
-  theme(
-    plot.title = element_blank(),
-    axis.text = element_text(size = axis_text_size),
-    legend.position = "right"
-    )
-p_allen
-
-save_plot(p_allen, "presentation_allen_umap", width = 7.5, height = 6,
-          apply_theme = FALSE)
-
-
-## Featureplots --------------------------------------------------------------
-
-for (gene in genes) {
-  p_fea <- FeaturePlot(seu, reduction = "umap", pt.size = 0.2, features = gene) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    theme(
-      axis.text = element_text(size = axis_text_size),
-      legend.position = "none"
-      )
-  file_name <- paste0("presentation_featureplot_", gene)
-  save_plot(p_fea, file_name, width = 5.5, height = 5.5, apply_theme = FALSE)
-}
-
-
-## Boxplot composition --------------------------------------------------------
-
-
-cond_cols <- c(
-  "Ctrl" = "#BDBDBD",
-  "ALS"    = "#CC79A7"
-)
-
-# I added dots, that's a good addition!
-p_comp <- boxplot_composition(cell_counts, "condition") +
-  scale_fill_manual(values = cond_cols)
-p_comp
-
-save_plot(p_comp, "presentation_composition", width = 4.5, height = 5, 
-          apply_theme = FALSE)
-
-
-
-```
-
-# Temporary file saving
-
-This is just temporary, saving the file in between so I now I get results which have been run in the conda environment.
-
-```{r}
-#| label: chunk-xx-saverds
-#| eval: false
-dir_data_temp <- file.path(dir_home, "data/temporary")
-file_rds <- file.path(dir_data_temp, "seurat_shortread_astro_clustered.rds")
-saveRDS(seu, file_rds)
-```
-
-```{r}
-#| label: chunk-xx-readrds
-#| eval: false
-# From temporary file:
-dir_data_temp <- file.path(dir_home, "data/temporary")
-file_rds <- file.path(dir_data_temp, "seurat_shortread_astro_clustered.rds")
-seu <- readRDS(file_rds)
-```
-
-```{r}
-#| label: chunk-xx-readrds
-#| eval: false
-# No longer from temporary file but real one!!
-file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
-seu <- readRDS(file_rds)
-```
-
 
 # Session info
 

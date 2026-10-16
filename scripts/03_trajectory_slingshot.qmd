@@ -216,7 +216,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript()
+      p <- p + theme_manuscript(legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -290,6 +290,7 @@ parse_slingshot <- function(sce, reduction_plot = reduction,
     pivot_longer(
       cols = starts_with("slingPseudotime"), 
       names_to = "Lineage",
+      names_pattern = "(\\d+)", # Only keep the digit of the lineage
       values_to = "pseudotime"
       )
   
@@ -327,17 +328,23 @@ parse_slingshot <- function(sce, reduction_plot = reduction,
 
 For the line of a lineage, I added two geom_paths: one black and one white. That makes a black line with a white border around it, which makes it easier to see, I think.
 
+I applied ggrastr::geom_point_rast, as that makes the pdf size managable for LaTeX
+
 ```{r}
 #| label: chunk-09-helper-plot-pseudotime
 
-plot_pseudotime <- function(pseudotime_list, pseudotime_avg = FALSE) {
+plot_pseudotime <- function(
+    pseudotime_list, 
+    pseudotime_avg = FALSE, 
+    pt_size = 0.3
+    ) {
   pseudotime_dim_avg <- pseudotime_list$pseudotime_dim_avg
   pseudotime_dim <- pseudotime_list$pseudotime_dim
   curves <- pseudotime_list$curves
   
   if (pseudotime_avg) {
     p_pseudo <- ggplot(pseudotime_dim_avg, aes(x = dim1, y = dim2)) +
-      geom_point(aes(color = pseudotime), size = 0.3)  +
+      ggrastr::geom_point_rast(aes(color = pseudotime), size = pt_size)  +
       scale_colour_viridis_c(na.value = "grey") +
       geom_path(
         data = curves  |> arrange(Order),
@@ -353,10 +360,10 @@ plot_pseudotime <- function(pseudotime_list, pseudotime_avg = FALSE) {
     p_pseudo <- p_pseudo + theme_classic()
   } else {
     p_pseudo <- ggplot() +
-      geom_point(
+      ggrastr::geom_point_rast(
         data = pseudotime_dim,
         aes(x = dim1, y = dim2, color = pseudotime),
-        size = 0.3
+        size = pt_size
         ) +
       scale_colour_viridis_c(na.value = "grey") +
       geom_path(
@@ -495,33 +502,38 @@ pseudotime_list_umap <- parse_slingshot(
 
 ```{r}
 #| label: fig-01-harm-per-lineage
-p_pseu_harm <- plot_pseudotime(pseudotime_list_harm) +
+p_pseu_harm <- plot_pseudotime(pseudotime_list_harm, pt_size = 0.01) +
   labs(x = "PC1", y = "PC2")
-p_pseu_harm + theme_manuscript()
+p_pseu_harm + theme_quarto()
 
 ```
 
 ```{r}
 #| label: fig-02-harm-average
-p_pseu_harm_avg <- plot_pseudotime(pseudotime_list_harm, pseudotime_avg = TRUE)  +
-  labs(x = "PC1", y = "PC2")
-p_pseu_harm_avg
+p_pseu_harm_avg <- plot_pseudotime(pseudotime_list_harm, pseudotime_avg = TRUE,
+                                   pt_size = 0.01)  +
+  labs(x = "PC1", y = "PC2") +
+  labs(color = 'Pseudotime')
+p_pseu_harm_avg + theme_quarto()
 
 ```
 ## Plots UMAP reduction
 
 ```{r}
 #| label: fig-03-umap-per-lineage
-p_pseu_umap <- plot_pseudotime(pseudotime_list_umap) +
-  labs(x = "UMAP1", y = "UMAP2")
-p_pseu_umap
+p_pseu_umap <- plot_pseudotime(pseudotime_list_umap, pt_size = 0.01) +
+  labs(x = "UMAP1", y = "UMAP2")  +
+  labs(color = 'Pseudotime')
+p_pseu_umap + theme_quarto()
 
 ```
 
 ```{r}
 #| label: fig-04-umap-average
-p_pseu_umap_avg <- plot_pseudotime(pseudotime_list_umap, pseudotime_avg = TRUE)  +
-  labs(x = "UMAP1", y = "UMAP2")
+p_pseu_umap_avg <- plot_pseudotime(pseudotime_list_umap, pseudotime_avg = TRUE,
+                                   pt_size = 0.01)  +
+  labs(x = "UMAP1", y = "UMAP2") +
+  labs(color = 'Pseudotime')
 p_pseu_umap_avg
 
 ```
@@ -529,9 +541,11 @@ p_pseu_umap_avg
 ```{r}
 #| label: chunk-xx-save-plots-pseudotime
 save_plot(p_pseu_harm, "pseudotime_harmony_ind", figure = "F5A")
-save_plot(p_pseu_harm_avg, "pseudotime_harmony_avg", figure = "F5B")
+save_plot(p_pseu_harm_avg, "pseudotime_harmony_avg", figure = "F5B",
+          legend_pos_manuscript = "right")
 save_plot(p_pseu_umap, "pseudotime_umap_ind", figure = "F5C")
-save_plot(p_pseu_umap_avg, "pseudotime_umap_avg", figure = "F5D")
+save_plot(p_pseu_umap_avg, "pseudotime_umap_avg", figure = "F5D",
+          legend_pos_manuscript = "right")
 
 ```
 
@@ -539,32 +553,60 @@ save_plot(p_pseu_umap_avg, "pseudotime_umap_avg", figure = "F5D")
 
 ```{r}
 #| label: fig-05-ridgeplot-sample
-plot_pseudotime_by(pseudotime_list_harm, variable = "AnonymousID")
-
+p_ridge_sample <- plot_pseudotime_by(
+  pseudotime_list_harm, 
+  variable = "AnonymousID"
+  )
+p_ridge_sample
 ```
 
 ```{r}
 #| label: fig-06-ridgeplot-gender
-plot_pseudotime_by(pseudotime_list_harm, variable = "Gender")
-
+p_ridge_gender <- plot_pseudotime_by(
+  pseudotime_list_harm, 
+  variable = "Gender"
+  )
+p_ridge_gender
 ```
 
 ```{r}
 #| label: fig-07-ridgeplot-site-of-onset
-plot_pseudotime_by(pseudotime_list_harm, variable = "primary_site_of_onset")
-
+p_ridge_site <- plot_pseudotime_by(
+  pseudotime_list_harm, 
+  variable = "primary_site_of_onset"
+  )
+p_ridge_site
 ```
 
 ```{r}
 #| label: fig-08-ridgeplot-ptdp43
-plot_pseudotime_by(pseudotime_list_harm, variable = "pTDP43_lumped")
-
+p_ridge_tdp <- plot_pseudotime_by(
+  pseudotime_list_harm, 
+  variable = "pTDP43_lumped"
+  )
+p_ridge_tdp
 ```
 
 ```{r}
 #| label: fig-09-ridgeplot-subtype
-plot_pseudotime_by(pseudotime_list_harm, variable = "disease.subtype")
+p_ridge_subtype <- plot_pseudotime_by(
+  pseudotime_list_harm, 
+  variable = "disease.subtype"
+  )
+p_ridge_subtype
 
+```
+
+```{r}
+#| label: chunk-xx-save-plots-ridges
+save_plot(p_ridge_tdp, "pseudotime_ridge_tdp", figure = "SF9A",
+          legend_pos_manuscript = "none")
+save_plot(p_ridge_site, "pseudotime_ridge_site", figure = "SF9B",
+          legend_pos_manuscript = "none")
+save_plot(p_ridge_subtype, "pseudotime_ridge_subtype", figure = "SF9C",
+          legend_pos_manuscript = "none")
+save_plot(p_ridge_sample, "pseudotime_ridge_sample", figure = "SF9D",
+          legend_pos_manuscript = "none")
 ```
 
 # Session info
