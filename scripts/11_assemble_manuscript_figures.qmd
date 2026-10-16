@@ -1,0 +1,342 @@
+---
+title: "[Title of analysis]"
+author: "Niels Boersbroek"
+date: "[Month] [Day], 2026"
+format: 
+  html:
+    toc: true
+    theme: materia
+    embed-resources: true
+---
+
+<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
+
+# [Title of analysis]
+
+[Introduction text here: what does this script do, why, and how does it fit into the rest of the project?]
+
+```{r}
+#| label: chunk-01-setup
+#| include: false
+# Manage settings for code chunks throughout the document
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Preparation
+
+## Prerequisites
+
+This script was run with the *conda environment* `[env_name]`.
+
+```{r}
+#| label: chunk-extra-setwd-remote-rstudio
+#| include: false
+#| eval: false
+# When examining this script on the remote RStudio server of the HPC, run this
+# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
+
+# The here package takes the home directory, but this is not automatically set
+# to the right one on the RStudio remote server.
+# Moreover, I use knitr::current_input(), but that does not work as an
+# interactive session on the RStudio server does not involve any knitting
+
+setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- getwd()
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+```{r}
+#| label: chunk-02-packages
+
+library(tidyverse)
+library(patchwork)
+library(here)
+library(knitr)
+
+```
+
+```{r}
+#| label: chunk-03-directories
+##  Set directories ------------------------------------------------------------
+
+# Get string of home directory. I used the here package, which sets the home
+# directory when loading library(here)
+dir_home <- here::here()
+
+## Manuscript figure directory 
+# rds/grob objects for report figures land here, to be assembled by
+# scripts/[XX]_assemble_manuscript_figures.qmd
+dir_man <- file.path(dir_home, "results/figures/manuscript")
+```
+
+## Defining variables
+
+This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+
+```{r}
+#| label: chunk-04-defining-variables
+# [define script-specific variables here]
+```
+
+## Helper functions
+
+<details>
+
+<summary>*Click here to view the helper functions of this document*</summary>
+
+### save_figure()
+
+`save_figure()` is specific for manuscript figures.
+
+```{r}
+#| label: chunk-05-helper-save-plot
+save_figure <- function(p, filename, width = 17, height = 20, unit = "cm") {
+  ## Save image on disk as png and pdf
+  file_png <- file.path(dir_man, paste0(filename, ".png"))
+  ggsave(file_png, p, width = width, height = height, dpi = 150, units = unit)
+  file_pdf <- file.path(dir_man, paste0(filename, ".pdf"))
+  ggsave(file_pdf, p, width = width, height = height, dpi = 150, units = unit)
+
+}
+```
+
+### load_rds()
+
+Loads the .rds files from disk
+
+```{r}
+load_rds <- function(figure = NULL) {
+  file_rds <- file.path(dir_man, paste0(figure, ".rds"))
+  readRDS(file_rds)
+}
+
+```
+
+<!-- [Add any additional, script-specific helper functions here as their own
+### function_name() subsection, following the same pattern as save_plot() above.
+Remember to move the closing </details> tag below, to after your last helper function.] -->
+
+</details>
+
+# Figures for manuscript
+
+## Figure 3
+
+```{r}
+#| label: chunk-05-load-grobs-fig3
+
+p_f3a <- load_rds("F3A")
+p_f3b <- load_rds("F3B")
+
+```
+
+```{r}
+#| label: fig-01-assemble-fig3
+    
+patch <- free(wrap_ggplot_grob(p_f3a)) | wrap_ggplot_grob(p_f3b)
+
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-fig3
+save_figure(patch, "mrp_fig3", height = 8)
+```
+
+## Figure 4
+
+```{r}
+#| label: chunk-05-load-grobs-fig4
+
+p_f4a <- load_rds("F4A")
+p_f4b <- load_rds("F4B")
+p_f4c <- load_rds("F4C")
+p_f4dk <- load_rds("F4DK")
+p_f4l <- load_rds("F4L")
+p_f4m <- load_rds("F4M")
+
+```
+
+```{r}
+#| label: fig-01-assemble-fig4
+    
+patch_topleft <- (wrap_ggplot_grob(p_f4a) | wrap_ggplot_grob(p_f4b)) +
+                    plot_layout(guides = "collect")
+
+patch_top <- (wrap_ggplot_grob(p_f4a) | wrap_ggplot_grob(p_f4b) | 
+                wrap_ggplot_grob(p_f4c)) +
+  plot_layout(guides = "collect", widths = c(1, 1, 1))
+
+patch_bottom <- (wrap_ggplot_grob(p_f4l) | wrap_ggplot_grob(p_f4m)) +
+  plot_layout(axes = "collect", widths = c(1, 1.2))
+
+patch <- (patch_top / p_f4dk / patch_bottom) + 
+  plot_layout(heights = c(0.8, 1.2, 0.6))
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-fig4
+save_figure(patch, "mrp_fig4", height = 20)
+```
+
+## Figure 5
+
+```{r}
+#| label: chunk-05-load-grobs-fig5
+p_f5a <- load_rds("F5A")
+p_f5b <- load_rds("F5B")
+p_f5c <- load_rds("F5C")
+p_f5d <- load_rds("F5D")
+p_f5e <- load_rds("F5E")
+p_f5f <- load_rds("F5F")
+p_f5g <- load_rds("F5G")
+p_f5g_umap <- load_rds("F5G_umap")
+p_f5h <- load_rds("F5H")
+p_f5h_umap <- load_rds("F5H_umap")
+p_f5leg <- load_rds("F5legend")
+```
+
+```{r}
+#| label: fig-01-assemble-fig5
+# a and c as wrap_elements, as they are not gglots anymore due to facetting
+patch_pca <- (wrap_elements(full = p_f5a) | wrap_ggplot_grob(p_f5b)) + 
+  plot_layout(widths = c(3, 1))
+    
+patch_umap <- (wrap_elements(full = p_f5c) | wrap_ggplot_grob(p_f5d)) + 
+  plot_layout(widths = c(3, 1))
+
+# I had to wrap the bottom seperately, so it spans the full widht, otherwise
+# it stops to leave whitespace where the legends of B and D are
+patch_bottom <- wrap_elements(full = (
+  wrap_ggplot_grob(p_f5e) | wrap_ggplot_grob(p_f5f) | 
+  wrap_ggplot_grob(p_f5g) | wrap_ggplot_grob(p_f5g_umap) |
+  wrap_ggplot_grob(p_f5h) | wrap_ggplot_grob(p_f5h_umap)
+  ) +
+  plot_layout(widths = c(1, 1, 1, 2, 1, 2)))
+
+patch <- (patch_pca / patch_umap / patch_bottom / wrap_elements(full = p_f5leg)) +
+  plot_layout(heights = unit(c(1, 1, 1, 0.4), c("null", "null", "null", "cm")))
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-fig5
+save_figure(patch, "mrp_fig5", height = 17)
+```
+
+## Figure 6
+
+```{r}
+#| label: chunk-05-load-grobs-fig6
+p_f6a <- load_rds("F6A")
+p_f6b <- load_rds("F6B")
+p_f6c <- load_rds("F6C")
+p_f6d <- load_rds("F6D")
+p_f6e <- load_rds("F6E")
+p_f6f <- load_rds("F6F")
+p_f6g <- load_rds("F6G")
+p_f6h <- load_rds("F6H")
+p_f6i <- load_rds("F6I")
+p_f6j <- load_rds("F6J")
+p_6leg <- load_rds("F6legend")
+```
+
+```{r}
+#| label: fig-01-assemble-fig6
+
+patch_top <- (wrap_ggplot_grob(p_f6a) | wrap_ggplot_grob(p_f6b)) +
+  plot_layout(guides = "collect")
+
+# Create a middle patch for the summary plots, so I can make it a little bigger
+patch_middle <- wrap_ggplot_grob(p_f6c) | wrap_ggplot_grob(p_f6d)
+
+patch_bottom <- (wrap_ggplot_grob(p_f6e) | wrap_ggplot_grob(p_f6f)) /
+  (wrap_ggplot_grob(p_f6g) | wrap_ggplot_grob(p_f6h)) /
+  (wrap_ggplot_grob(p_f6i) | wrap_ggplot_grob(p_f6j))
+
+
+patch <- (wrap_elements(p_6leg) / patch_top / 
+            patch_middle / patch_bottom) +
+  plot_layout(
+    heights = unit(c(0.1, 0.4, 0.45, 1.2), c("cm", "null", "null", "null"))
+    )
+
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-fig6
+save_figure(patch, "mrp_fig6", height = 24)
+```
+
+<details>
+
+<summary>*Click here to view how supplementary figures were assembled*</summary>
+
+## Supplementary figure 7
+
+```{r}
+#| label: chunk-05-load-grobs-sf9
+p_sf7a <- load_rds("SF7A")
+p_sf7b <- load_rds("SF7B")
+p_sf7c <- load_rds("SF7C")
+
+```
+
+```{r}
+#| label: fig-01-assemble-sf9
+
+patch <- (wrap_ggplot_grob(p_sf7a) | wrap_ggplot_grob(p_sf7a)) /
+  (wrap_ggplot_grob(p_sf7c) | plot_spacer())
+
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-sf9
+save_figure(patch, "mrp_supfig7", height = 14)
+```
+
+## Supplementary figure 9
+
+```{r}
+#| label: chunk-05-load-grobs-sf9
+p_sf9a <- load_rds("SF9A")
+p_sf9b <- load_rds("SF9B")
+p_sf9c <- load_rds("SF9C")
+p_sf9d <- load_rds("SF9D")
+
+```
+
+```{r}
+#| label: fig-01-assemble-sf9
+
+patch <- (wrap_elements(full = p_sf9a) | wrap_elements(full = p_sf9b)) /
+  (wrap_elements(full = p_sf9c) | wrap_elements(full = p_sf9d))
+
+patch
+```
+
+```{r}
+#| label: chunk-xx-save-sf9
+save_figure(patch, "mrp_supfig9", height = 14)
+```
+
+</details>
+
+# Session info
+
+I used the conda environment `[env_name]` to run this script. You can find major package versions in the file `/environments/[env_name].yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+
+```{r}
+#| label: chunk-99-sessioninfo
+sessionInfo()
+```
