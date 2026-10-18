@@ -29,6 +29,15 @@
 !/results/reports/.gitkeep
 
 
+## Ignore quarto-site files ---------------------------------------------
+
+
+# Creating a quarto site produces some folders which produce output I do
+# want to commit to Git
+/_freeze/
+/.quarto/
+/_site/
+
 
 ## Ignore other files ---------------------------------------------------
 
@@ -36,3 +45,11 @@
 # I use VS code and have a json set with specific settings, but these do not have to
 # present in the remote repo
 /.vscode/settings.json
+**/*.quarto_ipynb
+# For the slurm jobs, I provided my directory in config.sh - but this is my
+# personal directory, so it should not actually be put into the repo; anyone using
+# this repo should add his/her/their own directory as in config_example.sh
+/slurm/config.sh
+# SLURM output and error files are put into logs, anything there can be ignored as well
+/logs/*
+!/logs/.gitkeep
