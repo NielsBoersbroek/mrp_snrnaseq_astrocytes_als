@@ -1,0 +1,33 @@
+project:
+  type: website
+  output-dir: _site # Rendered HTML output ends up here              
+  render:
+    - index.qmd
+    - scripts/01_subsetting_astros.qmd
+
+execute:
+  freeze: true # Stores results of single scripts and prevents that I need to rerun every script
+
+website:
+  title: "snRNA-seq of Astrocytes in the ALS Spinal Cord"
+  page-navigation: true # previous/next buttons at the bottom of each page
+  sidebar: # left-hand table of contents, showing different pages
+    style: docked
+    search: true
+    contents:
+      - href: index.qmd
+        text: Overview
+      - section: "Analysis pipeline" # I'll make this 'short-read' and later add 'long-read'
+        contents:
+          - scripts/01_subsetting_astros.qmd
+          # same order as the render list above
+
+format:
+  html:
+    theme: materia
+    toc: true # right-hand table of contents per page
+    grid:
+      sidebar-width: 250px
+      body-width: 1100px # main grid adjustment, otherwise a small column on big monitors
+      margin-width: 300px
+      gutter-width: 1.5rem       

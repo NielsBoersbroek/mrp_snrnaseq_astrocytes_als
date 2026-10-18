@@ -1,0 +1,15 @@
+---
+title: "Overview"
+---
+
+This site contains the rendered analysis documents of my internship project:
+snRNA-seq of post-mortem spinal cord (ALS and controls), focused on astrocytes.
+
+## Pipeline
+
+| Script | What it does | Environment |
+|--------|--------------|-------------|
+| [01 Subsetting astrocytes](scripts/01_subsetting_astros.qmd) | Subsets astrocytes from the full dataset | `r_scrnaseq_core` |
+
+Scripts run in numbered order; each one reads the output of the earlier ones.
+See the repository README for setup and reproduction instructions.
