@@ -274,7 +274,7 @@ patch
 
 ```{r}
 #| label: chunk-xx-save-fig6
-save_figure(patch, "mrp_fig6", height = 24)
+save_figure(patch, "mrp_fig6", height = 23.5)
 ```
 
 <details>
@@ -294,7 +294,7 @@ p_sf7c <- load_rds("SF7C")
 ```{r}
 #| label: fig-01-assemble-sf9
 
-patch <- (wrap_ggplot_grob(p_sf7a) | wrap_ggplot_grob(p_sf7a)) /
+patch <- (wrap_ggplot_grob(p_sf7a) | wrap_ggplot_grob(p_sf7b)) /
   (wrap_ggplot_grob(p_sf7c) | plot_spacer())
 
 patch

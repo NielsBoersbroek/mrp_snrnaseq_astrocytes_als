@@ -151,9 +151,6 @@ condition_var <- "condition"
 # Reference level and the level which is tested against it
 ref_level <- "Ctrl"
 test_level <- "ALS"
-# Other sample-level columns to keep in the sample metadata. Gender is not in
-# the design (yet), but I might want to correct for it
-covariate_vars <- "Gender"
 
 ## Visualisation ---------------------------------------------------------------
 
@@ -1034,6 +1031,8 @@ Mean expression (log scale) against the log2 fold change (ALS vs Ctrl) per junct
 #| fig-height: 5
 print_tabset(ma_plots)
 ```
+
+
 ```{r}
 #| label: chunk-xx-save-maplots
 # I need those of GFAP and ANXA11 for the thesis, so save them
@@ -1042,12 +1041,19 @@ p_ma_anxa11 <- ma_plots$ANXA11
 
 save_plot(
     p_ma_gfap, "maplot_gfap", width = 8, height = 6,
-    figure = "F6A", add_tag = TRUE, legend_pos_grob = "top"
+    figure = "F6A"
     )
 save_plot(
     p_ma_anxa11, "maplot_anxa11", width = 8, height = 6,
-    figure = "F6B", add_tag = TRUE
+    figure = "F6B"
     )
+
+# Extract legend so I can manually add it
+p_leg <- p_ma_gfap +
+  theme(legend.position = "top")
+leg <- cowplot::get_legend(p_leg)
+saveRDS(leg, file.path(dir_man, "F6legend.rds"))
+wrap_elements(leg)
 
 ```
 
