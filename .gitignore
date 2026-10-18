@@ -11,6 +11,11 @@
 !/data/raw/.gitkeep
 /data/temporary/*
 !/data/temporary/.gitkeep
+# The exon junction data gets its own dedicated folder in /data/raw (required
+# for loading in with load10X() function), which I want to keep with .gitkeep
+!/data/raw/longread/
+/data/raw/longread/*
+!/data/raw/longread/.gitkeep
 
 
 ## Ignore result folders ------------------------------------------------
