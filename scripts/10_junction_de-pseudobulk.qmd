@@ -1,15 +1,10 @@
 ---
-title: "Junction differential expression ALS vs control (pseudobulk)"
+title: "10. Junction differential expression; ALS vs control (pseudobulk)"
 author: "Niels Boersbroek"
 date: "October 5, 2026"
-format: 
-  html:
-    toc: true
-    theme: materia
-    embed-resources: true
 ---
 
-# Junction differential expression ALS vs control (pseudobulk)
+# About this analysis
 
 <!-- TODO (Niels): this intro is a first draft, adapt it to your own words. -->
 
@@ -78,6 +73,30 @@ dir_cache <- file.path(dir_temp, "annotationhub_cache")
 dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
 ```
 
+### Packages
+
+```{r}
+#| label: chunk-02-packages
+
+# Basics
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(here)
+
+# Analysis-specific
+library(Seurat)
+library(DESeq2)
+library(scales)
+library(AnnotationHub) # To connect to ensembldb
+library(ensembldb) # To get transcript information
+# These Bioconductor packages (AnnotationHub and ensembldb) contain functions
+# with the same name as several dplyr functions (select, filter, etc.), so I
+# needed to specify those with dplyr:: thoroughout this script
+```
+
+### Directories
+
 ```{r}
 #| label: chunk-02-packages
 
@@ -135,7 +154,9 @@ dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
+
+### [Substantiation of choice]
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -198,7 +219,7 @@ transcript_ref <- c(
 
 ### theme_quarto() and theme_manuscript()
 
-I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
 #| label: chunk-06-helper-themes
@@ -233,7 +254,7 @@ theme_manuscript <- function(
 
 ### save_plot()
 
-This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure and additional arguments put into themes.
 
 The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
 
@@ -411,12 +432,10 @@ plot_ma <- function(res, gene, alpha = 0.05) {
 
 The functions below draw an exon junction relative to a reference transcript from the Ensembl database. They are used in the section on exon junction plots at the end of this document.
 
-<!-- NOTE: these functions are duplicated in 09 and 10. If you change one, change both (keep in sync). -->
-
 `get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble. (I used to paste this code every time I needed it.)
 
 ```{r}
-#| label: chunk-14-helper-get-gene-exons
+#| label: chunk-08-helper-get-gene-exons
 get_gene_exons <- function(edb, gene, columns = exon_columns) {
   exons(
     edb,
@@ -529,6 +548,10 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
   if (nrow(tx_selected) == 0) {
     stop("No exons found for transcript = '", transcript, "' in gene ", gene)
   }
+  
+  # Sometimes, exons are included starting with "LRG", which bug the
+  # visualization, so filter rows starting with ENSE
+  tx_selected <- dplyr::filter(tx_selected, str_starts(exon_id, "ENSE"))
   
   # Extract the positions of the boundaries. If the UTR is included, it makes
   # sure the first and last exon start and stop when the coding region starts
@@ -644,7 +667,11 @@ reference_structure <- function(gene, exons_gene, transcript = "canonical",
 }
 ```
 
-`visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene.
+`visualize_junction()` draws the plot. `ref` should be the output of `reference_structure()`. If `junction` is not provided, it draws the structure without a junction; `exons_gene` is only needed if a junction is provided. `margin_prop` defines the white space left and right of the gene - these can also be set manually.
+For manuscript:
+- There's also an option to print multiple junctions; this does require me to provide a very specific manaul input though.
+- In the manuscript, I labelled junctions (e.g. J1, J2) - I added an option which allows you to enter this into the plot
+
 
 ```{r}
 #| label: chunk-13-helper-visualize-junction
@@ -654,9 +681,13 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
                                exon_fill = "skyblue2",
                                intron_fill = "#404040",
                                utr_fill = "#E9ECEF",
-                               manual_border_coords = FALSE,
-                               xmin = NULL, xmax = NULL) {
-  
+                               manual_margin = FALSE, 
+                               xmin = NULL, xmax = NULL,
+                               curvature_arrow = 2,
+                               multiple_junctions = FALSE, 
+                               junctions_tibble = NULL,
+                               junction_label = NULL
+                               ) {
   exons_ref <- ref$exons_ref
   introns_ref <- ref$introns_ref
   introns_arrows <- ref$introns_arrows
@@ -677,32 +708,43 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   }
   
   # I want to have white space left and right of the gene, so define variables
-  # which will serve as input to coord_cartesian
-  # There also is the option to provide these manually
-  if (manual_border_coords) {
+  # which will serve as input to coord_cartesian. By default, it takes 0.05
+  # the distance of the exon, but users can also set it manually by setting
+  # manual_margin to TRUE and adding xmin and xmax
+  if(manual_margin) {
     coord_xmin <- xmin
     coord_xmax <- xmax
   } else {
       if (!is.null(utrs_ref)) {
-        coord_xmin_raw <- min(utrs_ref$xmin_utr)
-        coord_xmax_raw <- max(utrs_ref$xmax_utr)
-      } else {
-        coord_xmin_raw <- min(exons_ref$xmin_exon)
-        coord_xmax_raw <- max(exons_ref$xmax_exon)
-      }
-      gene_span <- coord_xmax_raw - coord_xmin_raw
-      coord_margin <- gene_span * margin_prop
-      coord_xmin <- coord_xmin_raw - coord_margin
-      coord_xmax <- coord_xmax_raw + coord_margin
+      coord_xmin_raw <- min(utrs_ref$xmin_utr)
+      coord_xmax_raw <- max(utrs_ref$xmax_utr)
+    } else {
+      coord_xmin_raw <- min(exons_ref$xmin_exon)
+      coord_xmax_raw <- max(exons_ref$xmax_exon)
+    }
+    gene_span <- coord_xmax_raw - coord_xmin_raw
+    coord_margin <- gene_span * margin_prop
+    coord_xmin <- coord_xmin_raw - coord_margin
+    coord_xmax <- coord_xmax_raw + coord_margin
   }
 
-  # Create title. Include transcript name in the title
+  # Create title. Include transcript name and canonical if the case
   transcript_name <- exons_ref$tx_id[1]
-  title <- paste0("Transcript ",  transcript_name, " of ", gene)
-  # Create subtitle if junction was provided, include junction name and category
+  if (exons_ref$tx_is_canonical[1] == 1) {
+    title <- paste0("Transcript ",  transcript_name, " (canonical) of ", gene)
+  } else {
+    title <- paste0("Transcript ",  transcript_name, " of ", gene)
+  }
+  # Create subtitle if junction was provided, include junction name, category
+  # and junction label if provided
   if (!is.null(junction_curve)) {
     category <- junction_curve$category
-    subtitle <- paste0(junction, ", category: ", category)
+    if (!is.null(junction_label)) {
+      subtitle <- paste0(junction_label, " (", junction, 
+                         "), category: ", category)
+    } else {
+      subtitle <- paste0(junction, ", category: ", category)
+    }
   }
   # Create x-axis label
   chr <- unique(exons_ref$seq_name)
@@ -718,7 +760,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     geom_segment(
       data = introns_arrows,
       aes(x = start_arrow, xend = end_arrow, y = y_arrow, yend = y_arrow),
-      arrow = arrow(length = unit(0.8, "cm"), type = "open", angle = 50),
+      arrow = arrow(length = unit(0.1, "npc"), type = "open", angle = 50),
       linewidth = 1
     ) +
     geom_rect(
@@ -738,18 +780,78 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   
   # Add the junction arc, but only if junction_curve isn't NULL
   if (!is.null(junction_curve)) {
+    # Curvature is an annoying argument: it needs to be positive if the gene is 
+    # on the reverse strand but positive if it is on the forward strand. It also
+    # needs to be lower if it's a junction spanning a lot of distance
+    # I let users add it manually (with default 2), turn it negative if on
+    # forward strand and positive if on reverse strand
+    if (exons_ref$seq_name[1] == 1) {
+      curvature_arrow <- -abs(curvature_arrow)
+    } else {
+      curvature_arrow <- abs(curvature_arrow)
+    }
     p <- p + geom_curve(
       data = junction_curve,
       aes(x = donor, xend = acceptor, y = y_junction, yend = yend_junction),
-      # BUG: maybe should be negative if on forward strand!!
-      curvature = 2, ncp = 1, linewidth = 0.8,
-      arrow = arrow(length = unit(0.03, "npc"))
+      curvature = curvature_arrow, ncp = 1, linewidth = 0.8,
+      arrow = arrow(length = unit(0.05, "npc"), type = "closed")
     )
+  }
+  
+  if (multiple_junctions) {
+    pattern <- "^(chr\\w+):(\\d+):(\\d+)"
+    junctions_tibble <- junctions_tibble |>
+      mutate(
+        chromosome = str_match(junction, pattern)[,2],
+        pos1 = as.numeric(str_match(junction, pattern)[,3]) - 1,
+        pos2 = as.numeric(str_match(junction, pattern)[,4]) + 1,
+        middle = ((pos2 - pos1) / 2) + pos1 # Needed to add labels
+        )
+    # Rename pos1 and pos2 to x and xend; which becomes which depends on the
+    # strand
+    if (exons_ref$seq_name[1] == 1) {
+      junctions_tibble <- junctions_tibble |>
+        dplyr::rename(x = pos1, xend = pos2)
+    } else {
+      junctions_tibble <- junctions_tibble |>
+        dplyr::rename(x = pos2, xend = pos1)
+    }
+    junctions_tibble <- junctions_tibble |>
+      mutate(
+        y = case_when(
+          canonical ~ 0.25,
+          layer == -1 ~ -0.4,
+          layer == -2 ~ -0.5,
+          .default = -0.3
+        ),
+        yend = y,
+        y_label = y + 0.04,
+      )
+    p <- p + geom_segment(
+      data = junctions_tibble,
+      aes(x = x, xend = xend, y = y, yend = yend),
+      arrow = arrow(length = unit(0.03, "npc"), type = "closed")
+    ) +
+      geom_text(
+        data = junctions_tibble,
+        aes(x = middle, y = y_label, label = label),
+        size = 8, size.unit = "pt"
+      )
+    # Set ylim for the next plot; needs to be different for multiple junctions
+    # ylim should only be adapted if layers go below 0
+    if (min(junctions_tibble$layer) <= -1) {
+      ylim <- c(min(junctions_tibble$y) - 0.02, 0.3)
+    } else {
+      ylim <- c(-0.3, 0.3)
+    }
+  # Also set ylim default if one doesn't plot multiple junctions  
+  } else {
+    ylim <- c(-0.3, 0.3)
   }
   
   # Theme, scale and layers
   p <- p +
-    coord_cartesian(xlim = c(coord_xmin, coord_xmax), ylim = c(-0.3, 0.3)) +
+    coord_cartesian(xlim = c(coord_xmin, coord_xmax), ylim = ylim) +
     theme_classic() +
     theme(
       axis.text.y = element_blank(),
@@ -767,10 +869,10 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
   } else {
     p <- p + labs(x = x_label, title = title)
   }
-  
   p
 }
 ```
+
 
 ### which_known_transcript()
 
@@ -779,6 +881,7 @@ By default, I print the exon junction on the canonical transcript, but I often f
 Arguments of the function:
 - type: what type of site to look for. "donor" or "acceptor" (only search for that site), "full" (donor and acceptor are consecutive exons in the transcript = known junction), "both" (donor and acceptor both exist in the transcript, not nec. consecutive; includes "full"), "auto" (default; strictest level which returns whatever matched it best)
 - tolerance: maximum distance in bp between my site and a catalogued exon boundary. 0 = exact match; use e.g. 10 to find the nearest described junction for a novel one.
+"auto" (default; strictest level which returns >= 1 transcript: full > both > donor/acceptor), "full" (donor and acceptor are
 
 ```{r}
 #| label: chunk-xx-helper-which-known-transcript

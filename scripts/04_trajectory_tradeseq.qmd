@@ -1,17 +1,10 @@
 ---
-title: "06: Trajectory Inference with Slingshot - TradeSeq DE"
+title: "4. DE across Slingshot's trajectories with tradeSeq"
 author: "Niels Boersbroek"
 date: "October 1, 2026"
-format: 
-  html:
-    toc: true
-    theme: materia
-    embed-resources: true
 ---
 
-<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
-
-# [Title of analysis]
+# About this analysis
 
 TradeSeq allows you to examine gene expression changes after inferring pseudotime with another package (the tradeSeq vignette literally starts from a slingshot object). It uses a negative binomial generalized additive model.
 
@@ -26,7 +19,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ## Prerequisites
 
-This script was run with the *conda environment* `[env_name]`.
+This script was run with the *conda environment* `r_scrnaseq_core`.
 
 ```{r}
 #| label: chunk-extra-setwd-remote-rstudio
@@ -64,22 +57,27 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
+### Packages
+
 ```{r}
 #| label: chunk-02-packages
 
+# Basics
 library(tidyverse)
 library(patchwork)
-library(ggrastr)
+library(knitr)
+library(here)
+
+# Analysis-specific
+library(Seurat)
 library(slingshot)
 library(tradeSeq)
-library(Seurat)
-library(msigdbr)
-library(fgsea)
-library(here)
-library(knitr)
-
-
+library(msigdbr) # For loading in GO-terms
+library(fgsea) # For running GSEA
+library(ggrastr) # To rasterize dot plots, otherwise figure-files balloon
 ```
+
+### Directories
 
 ```{r}
 #| label: chunk-03-directories
@@ -104,13 +102,15 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 
 ## Manuscript figure directory 
 # rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
+# scripts/11_assemble_manuscript_figures.qmd
 dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
+
+### [Substantiation of choice]
 
 filter_min_pt selects the threshold for the percentage of cells a gene must be expressed in to be included for fitGAM(). Deliberately set high (at 10%) as fitGAM has a high computing time and takes up a lot of memory (it didn't make it with 128GB if I set it at 5%)
 
@@ -135,7 +135,7 @@ number_of_top_pathways_up <- 10
 
 ### theme_quarto() and theme_manuscript()
 
-I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
 #| label: chunk-06-helper-themes
@@ -170,7 +170,7 @@ theme_manuscript <- function(
 
 ### save_plot()
 
-This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure and additional arguments put into themes.
 
 The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
 
@@ -224,6 +224,28 @@ save_plot <- function(
     # Save on disk
     saveRDS(p, file_rds)
   }
+}
+```
+
+### print_tabset()
+
+Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with `print_tabset()`. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option `#| output: asis`. `heading_level` should be one deeper than the heading above the chunk.
+
+```{r}
+#| label: chunk-07-helper-print-tabset
+print_tabset <- function(obj_list, heading_level = 3) {
+  cat("::: {.panel-tabset}\n\n")
+  for (nm in names(obj_list)) {
+    cat(strrep("#", heading_level), " ", nm, "\n\n", sep = "")
+    obj <- obj_list[[nm]]
+    if (inherits(obj, "ggplot")) {
+      print(obj)
+    } else if (is.data.frame(obj)) {
+      cat(knitr::kable(obj, format = "pipe"), sep = "\n")
+    }
+    cat("\n\n")
+  }
+  cat(":::\n\n")
 }
 ```
 
@@ -446,10 +468,6 @@ gsea_pathway_selection <- function(gsea_results, n_up = 10, n_down = 0) {
   top_pathways
 }
 ```
-
-<!-- [Add any additional, script-specific helper functions here as their own
-### function_name() subsection, following the same pattern as save_plot() above.
-Remember to move the closing </details> tag below, to after your last helper function.] -->
 
 </details>
 
@@ -989,7 +1007,7 @@ saveRDS(leg, file.path(dir_man, "F5legend.rds"))
 
 # Session info
 
-I used the conda environment `[env_name]` to run this script. You can find major package versions in the file `/environments/[env_name].yml`, but for full reproducibility, I'll display all dependencies and package versions below.
+I used the conda environment `r_scrnaseq_core` to run this script. You can find major package versions in the file `/environments/r_scrnaseq_core.yml`, but for full reproducibility, I'll display all dependencies and package versions below.
 
 ```{r}
 #| label: chunk-99-sessioninfo

@@ -1,17 +1,10 @@
 ---
-title: "Gene modules with hdWGCNA"
+title: "7. Gene modules with hdWGCNA"
 author: "Niels Boersbroek"
 date: "October 2, 2026"
-format: 
-  html:
-    toc: true
-    theme: materia
-    embed-resources: true
 ---
 
-<!-- Note to self: replace any personal/patient-identifying names with [name] before sharing this document, e.g. with an LLM. Remove this note in the final version. -->
-
-# Gene modules with hdWGCNA
+# About this analysis
 
 This script identifies co-expression modules in the astrocytes with hdWGCNA, the high-dimensional version of WGCNA for single-cell data. Because single-nuclei data is sparse, hdWGCNA first aggregates similar cells into *metacells*, then builds a co-expression network on them, and finally assigns genes to modules. The modules are examined (hub genes, module eigengenes on the UMAP) and annotated with GO terms.
 
@@ -71,20 +64,26 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
+### Packages
+
 ```{r}
 #| label: chunk-02-packages
 
+# Basics
 library(tidyverse)
-library(here)
-library(knitr)
-library(Seurat)
-# library(cowplot) # Do I still need this? hdWGCNA vignettes use it for theming
 library(patchwork)
+library(knitr)
+library(here)
+
+# Analysis-specific
+library(Seurat)
 library(WGCNA)
 library(hdWGCNA)
-library(msigdbr)
-library(fgsea)
+library(msigdbr) # For loading in GO-terms
+library(fgsea) # For running GSEA
 ```
+
+### Directories
 
 ```{r}
 #| label: chunk-03-directories
@@ -114,13 +113,15 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 
 ## Manuscript figure directory 
 # rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
+# scripts/11_assemble_manuscript_figures.qmd
 dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. Users can adapt these if desired.
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
+
+### [Substantiation of choice]
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -157,7 +158,7 @@ seed <- 42                 # metacell construction is random, so I set a seed
 
 ### theme_quarto() and theme_manuscript()
 
-I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript.
+I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
 #| label: chunk-06-helper-themes
@@ -192,7 +193,7 @@ theme_manuscript <- function(
 
 ### save_plot()
 
-This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure.
+This document displays all the figures I make, but I also want them saved to disk — both as `.png` and `.pdf`. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure and additional arguments put into themes.
 
 The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, `save_plot()` can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with `patchwork`. Set figure to the name the figure should carry in the report (e.g. `"SF1A"`) to trigger this; leave it `NULL` (the default) to just save the `.png`/`.pdf` as normal.
 
@@ -249,9 +250,27 @@ save_plot <- function(
 }
 ```
 
-<!-- [Add any additional, script-specific helper functions here as their own
-### function_name() subsection, following the same pattern as save_plot() above.
-Remember to move the closing </details> tag below, to after your last helper function.] -->
+### print_tabset()
+
+Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with `print_tabset()`. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option `#| output: asis`. `heading_level` should be one deeper than the heading above the chunk.
+
+```{r}
+#| label: chunk-07-helper-print-tabset
+print_tabset <- function(obj_list, heading_level = 3) {
+  cat("::: {.panel-tabset}\n\n")
+  for (nm in names(obj_list)) {
+    cat(strrep("#", heading_level), " ", nm, "\n\n", sep = "")
+    obj <- obj_list[[nm]]
+    if (inherits(obj, "ggplot")) {
+      print(obj)
+    } else if (is.data.frame(obj)) {
+      cat(knitr::kable(obj, format = "pipe"), sep = "\n")
+    }
+    cat("\n\n")
+  }
+  cat(":::\n\n")
+}
+```
 
 </details>
 
