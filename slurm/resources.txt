@@ -1,0 +1,12 @@
+# script                                    env              python_env   mem     time      cpus
+scripts/01_subsetting_astros.qmd            r_scrnaseq_core  -            64G   00:30:00  1
+scripts/02_clustering.qmd                   r_scrnaseq_core  py_scrnaseq  32G   01:00:00  1
+scripts/03_trajectory_slingshot.qmd         r_scrnaseq_core  -            32G   03:00:00  1
+scripts/04_trajectory_tradeseq.qmd          r_scrnaseq_core  -            128G  14:00:00  1
+scripts/05_trajectory_monocle3.qmd          r_monocle3       -            32G   04:00:00  1
+scripts/06_milo.qmd                         r_scrnaseq_core  -            16G   02:00:00  1
+scripts/07_hdwgcna.qmd                      r_scrnaseq_core  -            64G   02:00:00  1
+scripts/08_astrocyte_junction_seurat.qmd    r_scrnaseq_core  -            64G   02:00:00  1
+scripts/09_junction_de-cluster.qmd          r_scrnaseq_core  -            10G   00:30:00  1
+scripts/10_junction_de-pseudobulk.qmd       r_scrnaseq_core  -            10G   00:30:00  1
+scripts/11_assemble_manuscript_figures.qmd  r_scrnaseq_core  -            10G   00:30:00  1
