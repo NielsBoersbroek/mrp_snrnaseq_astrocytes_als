@@ -4,6 +4,16 @@ project:
   render:
     - index.qmd
     - scripts/01_subsetting_astros.qmd
+    - scripts/02_clustering.qmd
+    - scripts/03_trajectory_slingshot.qmd
+    - scripts/04_trajectory_tradeseq.qmd
+    - scripts/05_trajectory_monocle3.qmd
+    - scripts/06_milo.qmd
+    - scripts/07_hdwgcna.qmd
+    - scripts/08_astrocyte_junction_seurat.qmd
+    - scripts/09_junction_de-cluster.qmd
+    - scripts/10_junction_de-pseudobulk.qmd
+    - scripts/11_assemble_manuscript_figures.qmd
 
 execute:
   freeze: true # Stores results of single scripts and prevents that I need to rerun every script
@@ -17,15 +27,33 @@ website:
     contents:
       - href: index.qmd
         text: Overview
-      - section: "Analysis pipeline" # I'll make this 'short-read' and later add 'long-read'
+      - section: "Short-read analysis"
         contents:
           - scripts/01_subsetting_astros.qmd
-          # same order as the render list above
+          - scripts/02_clustering.qmd
+          - scripts/03_trajectory_slingshot.qmd
+          - scripts/04_trajectory_tradeseq.qmd
+          - scripts/05_trajectory_monocle3.qmd
+          - scripts/06_milo.qmd
+          - scripts/07_hdwgcna.qmd
+      - section: "Long-read analysis"
+        contents:
+        - scripts/08_astrocyte_junction_seurat.qmd
+        - scripts/09_junction_de-cluster.qmd
+        - scripts/10_junction_de-pseudobulk.qmd
+      - section: "Figure assembly"
+        contents:
+        - scripts/11_assemble_manuscript_figures.qmd
+          
 
 format:
   html:
     theme: materia
+    fig-width: 10
+    fig-height: 6
     toc: true # right-hand table of contents per page
+    toc-depth: 3
+    toc-title: Table of contents
     grid:
       sidebar-width: 250px
       body-width: 1100px # main grid adjustment, otherwise a small column on big monitors
