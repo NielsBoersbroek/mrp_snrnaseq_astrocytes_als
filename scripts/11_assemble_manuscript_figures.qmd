@@ -113,10 +113,6 @@ load_rds <- function(figure = NULL) {
 
 ```
 
-<!-- [Add any additional, script-specific helper functions here as their own
-### function_name() subsection, following the same pattern as save_plot() above.
-Remember to move the closing </details> tag below, to after your last helper function.] -->
-
 </details>
 
 # Figures for manuscript
@@ -133,9 +129,7 @@ p_f3b <- load_rds("F3B")
 
 ```{r}
 #| label: fig-01-assemble-fig3
-    
 patch <- free(wrap_ggplot_grob(p_f3a)) | wrap_ggplot_grob(p_f3b)
-
 patch
 ```
 

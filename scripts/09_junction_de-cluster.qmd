@@ -96,21 +96,6 @@ library(ensembldb) # To get transcript information
 ### Directories
 
 ```{r}
-#| label: chunk-02-packages
-
-library(tidyverse)
-library(here)
-library(knitr)
-library(Seurat)
-library(AnnotationHub)
-library(ensembldb)
-# These Bioconductor packages (AnnotationHub and ensembldb) contain functions
-# with the same name as several dplyr functions (select, filter, etc.), so I
-# needed to specify those with dplyr:: thoroughout this script
-
-```
-
-```{r}
 #| label: chunk-03-directories
 ##  Set directories ------------------------------------------------------------
 
@@ -283,7 +268,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -322,7 +307,7 @@ print_tabset <- function(obj_list, heading_level = 3) {
 
 The functions below draw an exon junction relative to a reference transcript from the Ensembl database. They are used in the section on exon junction plots at the end of this document.
 
-`get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble. (I used to paste this code every time I needed it.)
+`get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble.
 
 ```{r}
 #| label: chunk-08-helper-get-gene-exons
@@ -675,7 +660,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     # needs to be lower if it's a junction spanning a lot of distance
     # I let users add it manually (with default 2), turn it negative if on
     # forward strand and positive if on reverse strand
-    if (exons_ref$seq_name[1] == 1) {
+    if (exons_ref$seq_strand[1] == 1) {
       curvature_arrow <- -abs(curvature_arrow)
     } else {
       curvature_arrow <- abs(curvature_arrow)
@@ -699,7 +684,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
         )
     # Rename pos1 and pos2 to x and xend; which becomes which depends on the
     # strand
-    if (exons_ref$seq_name[1] == 1) {
+    if (exons_ref$seq_strand[1] == 1) {
       junctions_tibble <- junctions_tibble |>
         dplyr::rename(x = pos1, xend = pos2)
     } else {
@@ -918,12 +903,6 @@ which_known_transcript <- function(junction, exons_gene, type = "auto",
 
 For each gene, I load its junction Seurat, set the clusters as identities and run `FindAllMarkers()`: every cluster is compared with all other clusters of the astrocytes. Results are sorted by the raw p-value (`p_val`). Seurat's `p_val_adj` stays in the `.csv` as well.
 
-Think about the following while interpreting the results:
-
-- **Multiple testing scope.** `p_val_adj` is a Bonferroni correction over the features *in the object*. Here that is only the junctions of one gene. How would the number of tests change if I corrected over all astrocyte junctions, and what does that mean for the adjusted p-values?
-- **Cells as replicates.** The Wilcoxon test treats every nucleus as an independent observation, while script 10 aggregates per donor. Why can the two approaches lead to different conclusions?
-- **Fold changes on TF-IDF data.** `avg_log2FC` is calculated from the `data` layer. Does it still mean the same after TF-IDF as after `LogNormalize()`?
-
 ```{r}
 #| label: chunk-08-run-findallmarkers
 dot_plots <- list()
@@ -1008,7 +987,7 @@ bind_rows(marker_counts) |>
 
 ## Dotplots of the top junctions
 
-Dotplots of the top `n_top_junctions` junctions per gene (lowest raw p-value). The colour is the average (TF-IDF normalised) expression and the size of the dot is the percentage of nuclei in the cluster in which the junction is detected.
+Dotplots of the top junctions per gene (lowest raw p-value). The colour is the average (TF-IDF normalised) expression and the size of the dot is the percentage of nuclei in the cluster in which the junction is detected.
 
 ```{r}
 #| label: chunk-10-display-dotplots
@@ -1026,10 +1005,11 @@ print_tabset(dot_plots)
 print_tabset(top_tables)
 ```
 
-Create a csv file combining GFAP and ANXA11 results, to be used for the manuscript
-
 ```{r}
 #| label: chunk-11-statistics-for-manuscript
+#| echo: false
+# As this requires quite some hardcoding and has become a little messy, I'm 
+# hiding it from the html output
 table_gfap <- top_tables$GFAP |>
   mutate(gene = "GFAP")
 table_anxa11 <- top_tables$ANXA11 |>
@@ -1154,7 +1134,7 @@ for (gene in names(top_tables)) {
 
 ```
 
-Asis output so it gets formatted as markdown
+## GFAP
 
 ```{r}
 #| label: chunk-xx-display-gfap-junctions
@@ -1164,6 +1144,8 @@ Asis output so it gets formatted as markdown
 junction_plots_gfap <- gene_junction_plots$GFAP
 print_tabset(junction_plots_gfap)
 ```
+
+## ANXA11
 
 ```{r}
 #| label: chunk-xx-display-anxa11-junctions
@@ -1208,13 +1190,14 @@ p_junc_summary_gfap <- visualize_junction(
   multiple_junctions = TRUE, 
   junctions_tibble = junctions_tibble
   )
-p_junc_summary_gfap
-
+# Save to disk
 save_plot(
     p_junc_summary_gfap, "junction_summary_gfap", 
       width = 10, height = 4,
     figure = "F6C"
     )
+# Print for display
+p_junc_summary_gfap
 
 ```
 
@@ -1237,14 +1220,16 @@ p_junc_summary_anxa <- visualize_junction(
   multiple_junctions = TRUE, 
   junctions_tibble = junctions_tibble_anxa11
   )
-p_junc_summary_anxa
-
 # Save to disk
 save_plot(
     p_junc_summary_anxa, "junction_summary_anxa", 
     width = 10, height = 4,
     figure = "F6D"
     )
+# Print for display
+p_junc_summary_anxa
+
+
 
 ```
 
@@ -1273,7 +1258,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
-nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the available transcript
@@ -1282,11 +1266,12 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax, 
                              junction_label = junction_to_plot_label)
-p_junc
 # Save to disk
 save_plot(p_junc, "junction_noncan_exon2skip",
           width = 10, height = 4,
           figure = "F6E")
+p_junc
+
 
 ```
 
@@ -1305,7 +1290,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
-nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the available transcript
@@ -1314,12 +1298,13 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax, curvature_arrow = 6,
                              junction_label = junction_to_plot_label)
-p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_altacceptor7",
           width = 10, height = 4,
           figure = "F6F", add_tag = TRUE)
+p_junc
+
+
 
 ```
 
@@ -1340,7 +1325,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
-nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the first available transcript
@@ -1349,13 +1333,11 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
-p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_exon8utr1",
           width = 10, height = 4,
           figure = "F6G", add_tag = TRUE)
-
+p_junc
 ```
 
 #### (chr17:44905150:44908063)
@@ -1373,7 +1355,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
-nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the third available transcript - the first two did
@@ -1383,13 +1364,11 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
-p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_exon8utr2",
           width = 10, height = 4,
           figure = "F6H", add_tag = TRUE)
-
+p_junc
 ```
 
 #### (chr17:44905781:44908063)
@@ -1407,7 +1386,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "acceptor", tolerance = 500)
-nrow(tx_hits)
 tx_hits
 
 # Visualize this junction on the canonical transcript, as there is no full match
@@ -1416,14 +1394,11 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax, curvature_arrow = 0.8,
                              junction_label = junction_to_plot_label)
-p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_exon8utr3",
           width = 10, height = 4,
           figure = "F6I", add_tag = TRUE)
-
-
+p_junc
 ```
 
 ### Both donor and acceptor in 3' UTR (chr17:44903560:44904441)
@@ -1441,7 +1416,6 @@ junction_to_plot_label <- junctions_tibble[
 # Examine which known junctions there are for this gene
 tx_hits <- which_known_transcript(junction_to_plot, exons_gene, 
                                   type = "auto", tolerance = 0)
-nrow(tx_hits)
 tx_hits
 
 # Visualize the junction on the fourth available transcript; on that one, it
@@ -1451,13 +1425,11 @@ p_junc <- visualize_junction(ref_list, gene, junction = junction_to_plot,
                              exons_gene = exons_gene, manual_margin = TRUE, 
                              xmin = xmin, xmax = xmax,
                              junction_label = junction_to_plot_label)
-p_junc
-
 # Save to disk
 save_plot(p_junc, "junction_noncan_fullutr",
           width = 10, height = 4,
           figure = "F6J", add_tag = TRUE)
-
+p_junc
 ```
 
 # Session info

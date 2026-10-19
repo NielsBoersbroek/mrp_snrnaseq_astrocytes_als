@@ -127,7 +127,7 @@ astro_markers <- c("GFAP", "AQP4", "SLC1A2", "OBI1-AS1")
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
-#| label: chunk-06-helper-themes
+#| label: chunk-05-helper-themes
 theme_quarto <- function(
     legend_position = "right", 
     plot_title = element_blank()
@@ -166,7 +166,7 @@ The figures for my written report contain subfigures spread across multiple scri
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
-#| label: chunk-05-helper-save-plot
+#| label: chunk-06-helper-save-plot
 save_plot <- function(
     p, filename, 
     width = 10, height = 6, 
@@ -203,7 +203,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -244,7 +244,7 @@ In the section **Visualization Astrocyte Frequency**, I'll make barplots with th
 
 
 ```{r}
-#| label: chunk-07-helper-calc-freq
+#| label: chunk-08-helper-calc-freq
 calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   freq_table <- table(
     metadata[, col_celltype],
@@ -252,10 +252,10 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
   ) |>
     as.data.frame()
   colnames(freq_table) <- c("Celltype", "Sample", "Frequency")
-  # Rearrange the columns so they are in a sensible order; as sample numbers are
-  # given with single digits for single digit character, it's currently in the
-  # order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and does
-  # not count up like we humans would.
+  # Rearrange factor levels so they are in a sensible order; as sample numbers
+  # are given with single digits for single digit character, it's currently in 
+  # the order ALS1, ALS10, ALS11, ..., ALS19, ALS2, ALS20, ALS3, ALS4 etc. and 
+  # does not count up like we humans would.
   freq_table <- freq_table |>
     mutate(
       Sample = fct_relevel(
@@ -268,14 +268,13 @@ calc_freq <- function(metadata, col_celltype, col_sample = "AnonymousID") {
 
 ### bar_freq()
 
-`bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument `just_astro` because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of `calc_freq()` as input. I added the argument `theme_manuscript` because I wanted to apply the functions `theme_quarto()` and `theme_manuscript()`, but applying these themes after I ran the function `bar_freq()` meant that ` + theme(axis.text.x = element_text(angle = 90))` gets overwritten - which is essential for making the x-axis readable. Thus, I had to add `theme_quarto()` or `theme_manuscript()` within the `bar_freq()` function, so I can adjust x-axis labels afterwards.
+`bar_freq()` creates the visualizations of the same section. The argument freq_type becomes the argument to position in geom_bar: "stack" makes it absolute, "fill" makes it proportional. I added the argument `just_astro` because I want to manually colour the plot red vs grey in case of the astrocyte vs non-astrocyte plot. The function assumes you provide the output of `calc_freq()` as input.
 
 ```{r}
-#| label: chunk-08-helper-bar-freq
+#| label: chunk-09-helper-bar-freq
 # The argument freq_type becomes the argument to position in geom_bar.
 # "stack" makes it absolute, "fill" makes it proportional.
-bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE,
-                    theme_manuscript = FALSE) {
+bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
   p_bar <- ggplot(freq_table, aes(fill = Celltype, y = Frequency, x = Sample)) +
     geom_bar(position = freq_type, stat = "identity")
 
@@ -298,10 +297,10 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE,
 
 ## Load Seurat in from disk
 
-The object `seu_spinal_allcelltypes_shortread_postQC.rds` was the object which \[name\] shared with me after her full QC.
+The object `seu_shortread_allcelltypes_postQC.rds` was the object which \[name\] shared with me after her full QC.
 
 ```{r}
-#| label: chunk-09-open-seurat
+#| label: chunk-10-open-seurat
 file_rds <- file.path(dir_data_in, "seu_shortread_allcelltypes_postQC.rds")
 seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
@@ -316,10 +315,9 @@ Some ugliness in the metadata, I'm fixing it here, in the root.
 - There was not yet a column with `ALS` vs `Ctrl`, so I added the column `condition`.
 
 ```{r}
-#| label: chunk-10-fix-metadata
+#| label: chunk-11-fix-metadata
 metadata <- seu@meta.data
 
-# How to fix the metadata of pTDP-43 stage and other columns
 metadata <- metadata |>
   mutate(
     condition = ifelse(
@@ -345,7 +343,6 @@ metadata <- metadata |>
     # This relevel steps makes the visualizations make more sense
     pTDP43_lumped = fct_relevel(pTDP43_lumped, "Ctrl", "FUS ALS")
   )
-# Still need to order factor levels?
 
 seu@meta.data <- metadata
 ```
@@ -385,7 +382,7 @@ p_allen_group + theme_quarto(legend_position = "none")
 ```
 
 ```{r}
-#| label: chunk-10-save-plots
+#| label: chunk-12-save-plots
 #| echo: false
 # Store the plots, but keep this hidden for the output
 save_plot(p_allen_subclass, "allcelltypes_umap_alansubclass", figure = "F3A")
@@ -409,7 +406,7 @@ p_feature + theme_quarto()
 ```
 
 ```{r}
-#| label: chunk-11-save-plots
+#| label: chunk-13-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_feature, "allcelltypes_featureplot")
@@ -428,7 +425,7 @@ This section uses the functions `calc_freq` and `bar_freq`, which I created myse
 I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
 
 ```{r}
-#| label: chunk-12-preprocessing-freq
+#| label: chunk-14-preprocessing-freq
 # Extract dataframe from seurat object
 metadata <- seu@meta.data |>
   as.data.frame()
@@ -439,8 +436,8 @@ freq_table <- calc_freq(
   "AnonymousID"
 )
 
-# Show the top rows in the knitted file
-kable(head(freq_table))
+# Display what the new data structure looks like
+kable(head(freq_table, 10))
 ```
 
 ```{r}
@@ -453,27 +450,23 @@ p_abs + theme_quarto()
 ```{r}
 #| label: fig-05-proportional-freq
 #| fig-cap: "Proportional frequency of cell types"
-#| # This ones a little fancier atm because it's in the manuscript
-p_prop <- bar_freq(freq_table, "fill") +
-  labs(y = "Proportion") +
-  theme(
-    axis.title.x = element_blank(),
-    legend.title = element_blank()
-    )
+p_prop <- bar_freq(freq_table, "fill")
 p_prop + theme_quarto()
 ```
 
 ```{r}
-#| label: chunk-13-save-plots
+#| label: chunk-15-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs")
 
-# For 4B, I need to adjust the legend a little, so I will run theme_manuscript
+# For F3B, I need to adjust the legend a little, so I will run theme_manuscript
 # manually so I can adjust legendsize afterwards
 p_prop <- p_prop  + theme_manuscript(legend_position = "right") +
+  labs(y = "Proportion") +
   guides(fill = guide_legend(ncol = 1))  +
   theme(
+    axis.title.x = element_blank(),
     legend.key.size = unit(0.2, "cm"), 
     legend.text = element_text(size = 6),
     legend.title = element_blank()
@@ -486,7 +479,7 @@ save_plot(p_prop, "allcelltypes_barplot_prop", figure = "F3B",
 ### Frequency astrocyte vs non-astrocyte
 
 ```{r}
-#| label: chunk-14-preprocessing-freq
+#| label: chunk-16-preprocessing-freq
 # Make a column which states whether something is an astrocyte or not
 metadata$astro <- ifelse(
   test = metadata$predicted.id_coarse_allen_subclass == "Astrocytes",
@@ -516,7 +509,7 @@ p_prop
 ```
 
 ```{r}
-#| label: chunk-15-save-plots
+#| label: chunk-17-save-plots
 #| echo: false
 # Store the plot, but keep this hidden for the output
 save_plot(p_abs, "allcelltypes_barplot_abs_just_astro")
@@ -528,7 +521,7 @@ save_plot(p_prop, "allcelltypes_barplot_prop_just_astro")
 Now that we have inspected the astrocytes in the whole dataset, I can subset the astrocytes which I will continue in the rest of the project. I wil subset the astrocytes as annotated in the column `predicted.id_coarse_allen_subclass`, which was visualized in @fig-01-umap-subclass.
 
 ```{r}
-#| label: chunk-16-subset-astros
+#| label: chunk-18-subset-astros
 seu_astros <- subset(
   seu,
   subset = predicted.id_coarse_allen_subclass == "Astrocytes"
@@ -540,7 +533,7 @@ seu_astros
 Even though one could technically still call this a raw file (I have not done any preprocessing besides subsetting the astrocytes), I will store it in the folder `data/processed` rather than `data/raw`: I count the subsetting as preprocessing.
 
 ```{r}
-#| label: chunk-17-save-to-disk
+#| label: chunk-19-save-to-disk
 file_rds <- file.path(dir_data_out, "seu_shortread_astros_subset.rds")
 saveRDS(seu_astros, file_rds)
 ```

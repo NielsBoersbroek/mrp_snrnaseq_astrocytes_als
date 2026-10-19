@@ -219,7 +219,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -542,6 +542,7 @@ p_pseu_harm_avg <- plot_pseudotime(pseudotime_list_harm, pseudotime_avg = TRUE,
 p_pseu_harm_avg + theme_quarto()
 
 ```
+
 ## Plots UMAP reduction
 
 ```{r}
@@ -565,6 +566,7 @@ p_pseu_umap_avg
 
 ```{r}
 #| label: chunk-xx-save-plots-pseudotime
+#| echo: false
 save_plot(p_pseu_harm, "pseudotime_harmony_ind", figure = "F5A")
 save_plot(p_pseu_harm_avg, "pseudotime_harmony_avg", figure = "F5B",
           legend_pos_manuscript = "right")
@@ -624,6 +626,7 @@ p_ridge_subtype
 
 ```{r}
 #| label: chunk-xx-save-plots-ridges
+#| echo: false
 save_plot(p_ridge_tdp, "pseudotime_ridge_tdp", figure = "SF9A",
           legend_pos_manuscript = "none")
 save_plot(p_ridge_site, "pseudotime_ridge_site", figure = "SF9B",

@@ -191,8 +191,7 @@ qc_features <- c(
 
 # Genes of interest.
 # NOTE: keep this list in sync with 09 and 10!
-genes <- c("GFAP", "ANXA11", "CRYAB", "CHI3L1", "OSMR", "HPSB1", "TNC", 
-           "ALPK1", "C3", "VIM", "HPSE2", "GPC5")
+genes <- c("GFAP", "ANXA11", "CRYAB")
 
 # Minimal number of reads of the specific gene for a cell to be kept
 min_cell_gene <- 1
@@ -291,7 +290,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed

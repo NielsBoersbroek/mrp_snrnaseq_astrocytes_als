@@ -8,8 +8,6 @@ date: "October 2, 2026"
 
 This script identifies co-expression modules in the astrocytes with hdWGCNA, the high-dimensional version of WGCNA for single-cell data. Because single-nuclei data is sparse, hdWGCNA first aggregates similar cells into *metacells*, then builds a co-expression network on them, and finally assigns genes to modules. The modules are examined (hub genes, module eigengenes on the UMAP) and annotated with GO terms.
 
-<!-- [ADD] Extend this intro: why modules, and how do they connect to the trajectory (04/03) and differential abundance (05) results? -->
-
 ```{r}
 #| label: chunk-01-setup
 #| include: false
@@ -237,7 +235,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -279,20 +277,9 @@ print_tabset <- function(obj_list, heading_level = 3) {
 I load the clustered astrocyte Seurat object from disk.
 
 ```{r}
-#| label: chunk-07-load-seurat
+#| label: chunk-08-load-seurat
 seu <- readRDS(file.path(dir_data, file_seurat))
-```
-
-In the .R script, I ran `UpdateSeuratObject()` because I thought hdWGCNA requires Seurat v4, whereas my object is v5.
-
-```{r}
-#| label: chunk-08-update-seurat
-# [CHECK] My old comment said this "converted Seurat to v5", but the object was
-# already v5, and UpdateSeuratObject() updates *older* objects to the current
-# version. So what did this line actually do? Check the hdWGCNA documentation
-# for which Seurat versions it supports, and check class/version of the object
-# (e.g. packageVersion("Seurat"), snrna_astros@version). If the line does
-# nothing, remove it and this paragraph.
+# Run UpdateSeuratObject, as indicated in hdWGCNA vignette
 seu <- SeuratObject::UpdateSeuratObject(seu)
 ```
 
@@ -370,8 +357,12 @@ p_soft_powers
 ```{r}
 #| label: chunk-13-save-soft-powers
 #| echo: false
-ggsave(file.path(dir_fig, "hdwgcna_softpowersplot.png"), p_soft_powers,
-       width = 10, height = 8, dpi = 150)
+save_plot(
+  p_soft_powers, 
+  "hdwgcna_softpowersplot", 
+  width = 10, height = 8,
+  apply_theme = FALSE
+  )
 ```
 
 I also save the results as a table so I can inspect the exact numbers. The soft power I chose (`soft_power`, defined at the top) is the lowest power with an SFT model fit of at least 0.8.
@@ -446,9 +437,6 @@ seu <- ResetModuleNames(
 ```{r}
 #| label: fig-03-kme-ranked
 #| fig-cap: "Genes ranked by kME for each module."
-# [CHECK] In the .R script I used png() for this plot. I believe PlotKMEs()
-# returns a patchwork/ggplot object, so it should display directly. Verify; if
-# it does not, go back to the png()/dev.off() approach of chunk-16.
 p_kme <- PlotKMEs(seu, ncol = 5)
 p_kme
 ```
@@ -456,8 +444,12 @@ p_kme
 ```{r}
 #| label: chunk-19-save-kme
 #| echo: false
-ggsave(file.path(dir_fig, "hdwgcna_kme_genes_ranked.png"), p_kme,
-       width = 12, height = 8, dpi = 150)
+save_plot(
+  p_kme, 
+  "hdwgcna_kme_genes_ranked", 
+  width = 12, height = 8,
+  apply_theme = FALSE
+  )
 ```
 
 # Extracting hub genes and module assignments
@@ -499,7 +491,6 @@ plot_list_mes <- ModuleFeaturePlot(
 #| fig-cap: "Harmonized module eigengenes (hMEs) of each module on the astrocyte UMAP."
 #| fig-width: 14
 #| fig-height: 8
-# [CHANGE] Adjust ncol/size to the number of modules you actually found
 p_module_features <- wrap_plots(plot_list_mes, ncol = 6)
 p_module_features
 ```
@@ -507,13 +498,16 @@ p_module_features
 ```{r}
 #| label: chunk-23-save-module-features
 #| echo: false
-ggsave(file.path(dir_fig, "hdwgcna_module_feature_plot.png"),
-       p_module_features, width = 14, height = 8, dpi = 150)
+save_plot(
+  p_module_features, 
+  "hdwgcna_module_feature_plot", 
+  width = 14, height = 8,
+  apply_theme = FALSE
+  )
 ```
 
 ```{r}
 #| label: fig-xx-moduleradarplot
-
 p_module_radar <- ModuleRadarPlot(
   seu,
   group.by = 'annotation',
@@ -523,95 +517,15 @@ p_module_radar <- ModuleRadarPlot(
 p_module_radar
 ```
 
-# Saving the hdWGCNA object
+I planned to examine the modules with GO-terms, but in general, I did not have much time to examine hdWGCNA so I did not get to that...
 
-<!-- [ADD] Not in the .R script: the object with the hdWGCNA results was never
-saved, so a downstream script would have to rerun everything. Saved here so
-later scripts (e.g. a module score per condition) can reuse it. -->
+# Saving the hdWGCNA object
 
 ```{r}
 #| label: chunk-24-save-seurat
 saveRDS(seu, file.path(dir_data, "seu_shortread_astros_hdwgcna.rds"))
 ```
 
-# Module examination and GO terms
-
-<!-- [ADD] Still to do, written by you (no code provided on purpose):
-1. Examine the modules: which hub genes characterize each module? Do modules
-   differ between ALS and control, or along pseudotime (03/04)?
-2. GO enrichment per module. Think about the *background*: which gene set
-   should the "universe" be, given you only tested genes expressed in >= 5% of
-   cells (hint: look at modules$gene_name)?
-3. Add narrative text and new chunks (chunk-25-..., fig-05-...) here. -->
-
-```{r}
-#| label: chunk-xx-go-terms
-#| eval: false
-# First load in the gene set using msigdbr::msigdbr()
-gs_go_bp <- msigdbr(
-  species = "Homo sapiens", 
-  collection = "C5", 
-  subcollection = "GO:BP"
-)
-# Adapt the gene set to the input required for fgsea: it needs to be a list 
-# with your pathways/gene set names and the genes that make up each pathway.
-gene_sets <- split(x = gs_go_bp$gene_symbol, f = gs_go_bp$gs_name)
-
-# Get the modules table and remove grey genes
-modules <- GetModules(seu) %>% subset(module != 'grey')
-
-# rank all genes in this kME - I took this directly from the hdWGCNA fgsea
-# vignette
-cur_mod <- 'AST-M5'
-cur_genes <- modules[,(c('gene_name', 'module', paste0('kME_', cur_mod)))]
-gene_scores <- cur_genes$kME
-names(gene_scores) <- cur_genes$gene_name
-gene_scores <- ranks[order(gene_scores)]
-
-gsea_res <- fgsea(
-    pathways = gene_sets, # List of gene sets to check
-    stats = gene_scores,
-    scoreType = 'std', # std as we have both pos and neg rankings
-    minSize = 10, # otherwise I only get pathways with 2-5 genes
-    maxSize = 500,
-  )
-
-# Decide how many plots you want to make for the upregulated and downregulated
-# genes
-number_of_top_pathways_down <- 10
-number_of_top_pathways_up <- -10
-
-
-gsea_pathway_selection <- function(gsea_results, n_up = 10, n_down = 0) {
-  top_pathways_up <- gsea_results |> 
-    filter(padj < 0.05) |>  
-    slice_max(NES, n = n_up) |>
-    pull(pathway)
-  top_pathways_down <- gsea_results |>
-    filter(padj < 0.05) |>
-    slice_min(NES, n = n_down) |>
-    pull(pathway)
-  top_pathways <- c(top_pathways_up, rev(top_pathways_down))
-  top_pathways
-}
-
-## Create a visualization - still need to transfer this function
-top_pathways <- gsea_pathway_selection(
-  gsea_res, 
-  n_up = number_of_top_pathways_up,
-  n_down = number_of_top_pathways_down
-  )
-p_gsea <- plotGseaTable(
-  gene_sets[top_pathways], 
-  stats = gene_scores, 
-  fgseaRes = gsea_res, 
-  pathwayLabelStyle = list(size = 9),
-  gseaParam = 0.5 # Makes the figure clearer
-  )
-
-
-
-```
 
 # Session info
 

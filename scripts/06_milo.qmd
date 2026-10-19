@@ -128,7 +128,7 @@ k <- 10
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
-#| label: chunk-06-helper-themes
+#| label: chunk-05-helper-themes
 theme_quarto <- function(
     legend_position = "right", 
     plot_title = element_blank()
@@ -167,7 +167,7 @@ The figures for my written report contain subfigures spread across multiple scri
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
-#| label: chunk-05-helper-save-plot
+#| label: chunk-06-helper-save-plot
 save_plot <- function(
     p, filename, 
     width = 10, height = 6, 
@@ -204,7 +204,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -248,7 +248,7 @@ print_tabset <- function(obj_list, heading_level = 3) {
 [Narrative text explaining what this step does and why.]
 
 ```{r}
-#| label: chunk-xx-open-seurat
+#| label: chunk-08-open-seurat
 file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 seu <- readRDS(file_rds)
 
@@ -276,7 +276,7 @@ rm(sce)
 I used all default settings to run Milo. One can change the `k` parameter in defining variables, I deliberately set this at 10.
 
 ```{r}
-#| label: chunk-xx-graph-nhoods
+#| label: chunk-09-graph-nhoods
 # Construct a KNN graph. As I transfered the reduction "harmony" to the
 # reductionname "PCA", it will automatically use this reduction for all
 # following steps.
@@ -286,6 +286,8 @@ milo <- buildGraph(
   d = 50, # default setting
 )
 # Define neighbourhoods. Settings are default
+# This uses stochasticity, so set a seed
+set.seed(42)
 milo <- makeNhoods(
   milo,
   prop = 0.1,
@@ -299,21 +301,22 @@ milo <- makeNhoods(
 If the number of cells per neighborhood is too low, I should adapt the k parameter (tutorial recommends to have the distribution peaking above 20).
 
 ```{r}
-#| label: fig-xx-nhoodsize
+#| label: fig-01-nhoodsize
 #| fig-cap: "The number of cells which belong to each neighborhood"
 p_nhoodsize <- plotNhoodSizeHist(milo)
 p_nhoodsize
 ```
 
 ```{r}
-#: label: chunk-xx-save-plot-nhoodsize
+#| label: chunk-11-save-plot-nhoodsize
+#| echo: false
 save_plot(p_nhoodsize, "hist_nhoodsize")
 ```
 
 The rest of milo works by analysing the cell counts per neighborhood per sample. In my data, the sample is given with the column "AnonymousID".
 
 ```{r}
-#| label: chunk-xx-countcells
+#| label: chunk-12-countcells
 milo <- countCells(
   milo,
   meta.data = data.frame(colData(milo)),
@@ -322,8 +325,9 @@ milo <- countCells(
 ```
 
 To perform differential abundance testing with Milo, I need an additional dataframe with metadata. In my case, I want to test for the column "condition" (= ALS vs Ctrls). I first ran Milo months ago and my `dplyr` skills were not yet that good back then, so I got the solution below from [here](https://hbctraining.github.io/Pseudobulk-for-scRNAseq/lessons/08a_miloR.html). Might as well still use it, but credit where credit's due. 
+
 ```{r}
-#| label: chunk-xx-prepare-metadata
+#| label: chunk-13-prepare-metadata
 milo_design <- colData(milo) |>
   data.frame() |>
   select(AnonymousID, condition) |>
@@ -337,7 +341,7 @@ milo_design <- milo_design[order_rows, , drop = FALSE]
 ```
 
 ```{r}
-#| label: chunk-xx-test-nhoods
+#| label: chunk-14-test-nhoods
 milo <- calcNhoodDistance(milo, d = 50) # Same d as buildGraph()
 
 da_results <- testNhoods(
@@ -350,14 +354,14 @@ da_results <- testNhoods(
 ### Inspect results
 
 ```{r}
-#| label: fig-xx-pval-hist
+#| label: fig-02-pval-hist
 p_pval <- ggplot(da_results, aes(PValue)) +
     geom_histogram(bins = 50)
 p_pval
 ```
 
 ```{r}
-#| label: fig-xx-logfc-volcano
+#| label: fig-03-logfc-volcano
 p_logfc <- ggplot(da_results, aes(logFC, -log10(SpatialFDR))) +
   geom_point() +
   geom_hline(yintercept = 1)
@@ -366,7 +370,7 @@ p_logfc
 
 Add metadata to results by annotating neighborhoods by condition
 ```{r}
-#| label: chunk-xx-annotate-hoods
+#| label: chunk-15-annotate-hoods
 # Annotate neighborhoods by condition
 da_results <- annotateNhoods(milo, da_results, coldata_col = "condition")
 # Categorize neighborhoods with < 70% of one condition as mixed
@@ -388,7 +392,7 @@ cells the neighbourhouds have in common.
 
 
 ```{r}
-#| label: chunk-xx-group-hoods
+#| label: chunk-16-group-hoods
 # Find group structure of neighborhoods
 da_results <- groupNhoods(milo, da_results, max.lfc.delta = 1)
 
@@ -401,7 +405,34 @@ plots the groups created with groupNhoods.
 The alpha is the FDR significance threshold (0.05 is default)
 
 ```{r}
-#| label: figure-xx-nhood-da
+#| label: fig-04-nhood-da
+p_nhood_da <- plotNhoodGraphDA(milo, da_results)
+p_nhood_da
+```
+
+```{r}
+#| label: fig-05-nhood-groups
+p_nhood_groups <- plotNhoodGroups(milo, da_results) +
+  theme(legend.position = "none")
+p_nhood_groups
+```
+
+```{r}
+#| label: fig-06-nhood-together
+p_nhood_da + p_nhood_groups
+```
+
+Also test one where I do not set a significant threshold at all.
+
+```{r}
+#| label: fig-07-nhood-da-loose
+p_nhood_da_loose <- plotNhoodGraphDA(milo, da_results, alpha = 1)
+p_nhood_da_loose
+```
+
+```{r}
+#| label: chunk-17-save-plots-for-manuscript
+#| echo: false
 p_nhood_da <- plotNhoodGraphDA(
   milo, 
   da_results, 
@@ -409,11 +440,6 @@ p_nhood_da <- plotNhoodGraphDA(
   size_range = c(1, 5)
   )
 p_nhood_da$layers[[1]] <- rasterise(p_nhood_da$layers[[1]], dpi = 300)
-p_nhood_da
-```
-
-```{r}
-#| label: figure-xx-nhood-groups
 p_nhood_groups <- plotNhoodGroups(
   milo, 
   da_results,  
@@ -423,11 +449,6 @@ p_nhood_groups <- plotNhoodGroups(
 p_nhood_groups$layers[[1]] <- rasterise(
   p_nhood_groups$layers[[1]], dpi = 300
   )
-p_nhood_groups
-```
-
-```{r}
-#| label: figure-xx-nhood-together
 patch <- p_nhood_da + p_nhood_groups +
   plot_annotation(
     tag_levels = "A", 
@@ -439,20 +460,10 @@ patch <- p_nhood_da + p_nhood_groups +
           )
       )
     )
-patch
-```
 
-```{r}
-#| label: figure-xx-nhood-da-loose
-p_nhood_da_loose <- plotNhoodGraphDA(milo, da_results, alpha = 1)
-p_nhood_da_loose
-```
-
-```{r}
-#| label: chunk-xx-save-plots-for-manuscript
 save_plot(p_nhood_da, "milo_umap_enrichment", figure = "SF11A",
           legend_pos_manuscript = "none")
-save_plot(p_nhood_da, "milo_umap_groups", figure = "SF11B",
+save_plot(p_nhood_groups, "milo_umap_groups", figure = "SF11B",
           legend_pos_manuscript = "none")
 save_plot(patch, "mrp_supfig11", height = 8, width = 17,
           apply_theme = FALSE)
@@ -463,7 +474,7 @@ save_plot(patch, "mrp_supfig11", height = 8, width = 17,
 I'll write both the dataframe of the results and the milo object on disk
 
 ```{r}
-#| label: chunk-xx-save-to-disk
+#| label: chunk-18-save-to-disk
 file_csv <- file.path(dir_tab, "milo_da_results.csv")
 write_csv(da_results, file_csv)
 

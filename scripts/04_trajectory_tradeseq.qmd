@@ -53,7 +53,7 @@ dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
 
 ## Manuscript figure directory 
 # rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
+# scripts/11_assemble_manuscript_figures.qmd
 dir_man <- file.path(dir_home, "results/figures/manuscript")
 ```
 
@@ -125,6 +125,9 @@ n_topgenes_to_plot <- 20
 # genes for the gsea
 number_of_top_pathways_down <- 10
 number_of_top_pathways_up <- 10
+
+# Reactive astrocyte genes to test
+mark_rea <- c("C3", "SERPING1", "CHI3L1", "OSMR", "HSPB1", "PRDX6", "VIM", "CRYAB")
 ```
 
 ## Helper functions
@@ -138,7 +141,7 @@ number_of_top_pathways_up <- 10
 I created my own themes to add to figures. `theme_quarto()` is used to add themes to figures as displayed in the Quarto document and saved to disk as `.pdf` or `.png`. `theme_manuscript()` is used to add themes to figures as they will end up in the manuscript. I can already add arguments with `theme()` or specific themes (e.g. `theme_classic()`, my personal favourite) to plots; adding `theme()` afterwards keeps whatever was added in `theme()` before it, unless I specify that arugment here - that's why I allowed to specify some things within my functions as well.
 
 ```{r}
-#| label: chunk-06-helper-themes
+#| label: chunk-05-helper-themes
 theme_quarto <- function(
     legend_position = "right", 
     plot_title = element_blank()
@@ -177,7 +180,7 @@ The figures for my written report contain subfigures spread across multiple scri
 A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, `save_plot()` converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as `.rds`. This is controlled by the `grob` argument, and defaults to `TRUE`, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set `grob = FALSE` only if a later step specifically needs the original, live ggplot object rather than its rendered form.
 
 ```{r}
-#| label: chunk-05-helper-save-plot
+#| label: chunk-06-helper-save-plot
 save_plot <- function(
     p, filename, 
     width = 10, height = 6, 
@@ -214,7 +217,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -260,7 +263,7 @@ I sort by asbolute values, so I see both positive and negative fold changes
 I want all results automatically saved on disk, but there is the option to turn this off
 
 ```{r}
-#| label: chunk-xx-helper-printable-results
+#| label: chunk-08-helper-printable-results
 
 printable_results <- function(results, test = NULL, lineage = NULL,
                               save_csv = TRUE) {
@@ -328,7 +331,7 @@ Choose the option with `printable_results_input = TRUE/FALSE`
 You also need to provide an sce and counts object for PlotSmoothers and a Seurat object for the feature plots. I also added a rasterize argument in case the plot needs to be rastered; I need this for plots I'll use in my report.
 
 ```{r}
-#| label: chunk-xx-helper-plot-topgenes
+#| label: chunk-09-helper-plot-topgenes
 plot_topgenes <- function(gene_input, sce = NULL, counts = NULL, 
                           seu = NULL, n_genes = 10, ncol = 5, linewidth = 0.4,
                           printable_results_input = TRUE, rasterize = FALSE) {
@@ -337,7 +340,7 @@ plot_topgenes <- function(gene_input, sce = NULL, counts = NULL,
   }
   
   if (printable_results_input) {
-    genes <- printable_results |>
+    genes <- gene_input |>
       slice_head(n = n_genes) |>
       pull(gene)
   } else {
@@ -408,7 +411,7 @@ Two ways to sort:
 `gsea_pathway_selection()` is a quick little function which extracts the most upregulated and downregulated pathways of a FGSEA results table, mostly for visualization. The numbers for upregulated and downregulated pathways are defined in the "Define variables" section. This function as used previously
 
 ```{r}
-#| label: chunk-xx-helper-prepare-gsea
+#| label: chunk-10-helper-prepare-gsea
 
 prepare_gsea <- function(results, lineage, sort = "logfc") {
   # Then extract results of given lineage
@@ -478,7 +481,7 @@ gsea_pathway_selection <- function(gsea_results, n_up = 10, n_down = 0) {
 Open the sce with Slingshot results
 
 ```{r}
-#| label: chunk-07-open-sce
+#| label: chunk-11-open-sce
 file_rds <- file.path(dir_data, "sce_shortread_astros_slingshot.rds")
 sce <- readRDS(file_rds)
 
@@ -494,7 +497,7 @@ I also filtered on genes which are expressed in a minimum percentage of cells. I
 
 
 ```{r}
-#| label: chunk-08-gene-selection
+#| label: chunk-12-gene-selection
 # Filter genes which are expressed in a minimum proportion of cells
 expressed_in_cells <- rowSums(counts > 0)
 expressed_in_cells_pt <- expressed_in_cells / ncol(sce) * 100
@@ -513,7 +516,7 @@ length(genes_keep)
 This is very computationally heavy; only run it if it has not yet been run before (i.e. if the file with the results is not yet stored on disk).
 
 ```{r}
-#| label: chunk-09-run-fitgam
+#| label: chunk-13-run-fitgam
 file_rds <- file.path(dir_data, "sce_shortread_astros_tradeseq.rds")
 if(file.exists(file_rds)) {
   # If it already exists, just open from disk
@@ -547,7 +550,7 @@ if(file.exists(file_rds)) {
 For some of these visualizations, I'll use Seurat, so open the Seurat object
 
 ```{r}
-#| label: chunk-xx-open-seurat
+#| label: chunk-14-open-seurat
 file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 seu <- readRDS(file_rds)
 ```
@@ -557,7 +560,7 @@ seu <- readRDS(file_rds)
 Associationtest finds genes which have general associations with lineages. These are not yet gene-specific.
 
 ```{r}
-#| label: chunk-xx-associaton-test
+#| label: chunk-15-associaton-test
 res_asso <- associationTest(sce_tradeseq)
 
 printable_asso <- printable_results(res_asso, test = "association")
@@ -567,27 +570,18 @@ kable(head(printable_asso, 10))
 Create visualizations using my plot_topgenes() function
 
 ```{r}
-#| label: fig-xx-association-test-top-smoothers
+#| label: chunk-16-association-test-top-smoothers
 plots_asso <- plot_topgenes(
   printable_asso,
   sce_tradeseq, counts, seu,
   n_genes = n_topgenes_to_plot
   )
-
-p_smoothers <- plots_asso$smoothers
-p_smoothers
 ```
 
 ```{r}
-#| label: fig-xx-association-test-top-pca
-p_pca <- plots_asso$feature_pca
-p_pca
-```
-
-```{r}
-#| label: fig-xx-association-test-top-umap
-p_umap <- plots_asso$feature_umap
-p_umap
+#| label: chunk-17-tabset-association-test
+#| output: asis
+print_tabset(plots_asso, heading_level = 3)
 ```
 
 ## startVsEndTest()
@@ -597,23 +591,68 @@ StartVsEndTest tests which genes go up/dowm from start to end per lineage. This 
 I set threshold at log(2). This tests which genes have a fold change that is significantly higher than 2 or significantly lower than 1/2 within or between the lineages of interest - otherwise genes with low foldchanges might still get high p-values. The output still contains all genes, so I can still use it for GO-terms.
 
 ```{r}
-#| label: chunk-xx-startvsend-test
-
+#| label: chunk-18-startvsend-test
 res_svse <- startVsEndTest(sce_tradeseq, l2fc = log2(2), lineages = TRUE)
 
-printable_lin1 <- printable_results(res_svse, test = "startvsend", lineage = 1)
-printable_lin1
-printable_lin2 <- printable_results(res_svse, test = "startvsend", lineage = 2)
-printable_lin2
-printable_lin3 <- printable_results(res_svse, test = "startvsend", lineage = 3)
-printable_lin3
-
+list_tables <- list()
+list_plots <- list()
+for (lineage in 1:3) {
+  list_entry_name <- paste0("Lineage ", lineage)
+  # Run printable_results() to get a table of top genes
+  topgenes_table <- printable_results(
+    res_svse, 
+    test = "startvsend", 
+    lineage = lineage
+    )
+  list_tables[[list_entry_name]] <- topgenes_table
+  # Create visualizations for these top genes
+  topgenes_plots <- plot_topgenes(
+    topgenes_table,
+    sce_tradeseq, counts, seu,
+    n_genes = n_topgenes_to_plot
+    )
+  list_plots[[list_entry_name]] <- topgenes_plots
+}
 ```
+
+### Table of topgenes
+
+```{r}
+#| label: chunk-19-tabset-topgenes-table
+#| output: asis
+print_tabset(list_tables, heading_level = 4)
+```
+
+### Topgenes lineage 1
+
+```{r}
+#| label: chunk-20-tabset-topgenes-lin1
+#| output: asis
+print_tabset(list_plots[["Lineage 1"]], heading_level = 4)
+```
+
+### Topgenes lineage 2
+
+```{r}
+#| label: chunk-21-tabset-topgenes-lin2
+#| output: asis
+print_tabset(list_plots[["Lineage 2"]], heading_level = 4)
+```
+
+### Topgenes lineage 3
+
+```{r}
+#| label: chunk-22-tabset-topgenes-lin3
+#| output: asis
+print_tabset(list_plots[["Lineage 3"]], heading_level = 4)
+```
+
+### GO-term enrichment
 
 For startVsEndTest(), I will also analyse trajectories with GO-term enrichment.
 
 ```{r}
-#| label: chunk-xx-go-terms
+#| label: chunk-23-go-terms-svset
 # First load in the gene set using msigdbr::msigdbr()
 gs_go_bp <- msigdbr(
   species = "Homo sapiens", 
@@ -660,164 +699,17 @@ for (lineage in 1:3) {
     valueStyle = list(size = 6),
     gseaParam = 0.5 # Makes the figure clearer
     )
-  plots_gsea[[lineage]] <- p_gsea
+  plots_gsea[[paste0("Lineage ", lineage)]] <- p_gsea
 }
 
 ```
-```{r}
-#| label: chunk-xx-go-terms-for-manuscript
-#| # Run it again but with increased font size
-plots_gsea <- list()
-# Run fgsea for each lineage. Store results and plot
-for (lineage in 1:3) {
-  gene_scores <- prepare_gsea(
-    res_svse,
-    lineage = lineage,
-    sort = "logfc"
-    )
-  
-  gsea_res <- fgsea(
-    pathways = gene_sets, # List of gene sets to check
-    stats = gene_scores,
-    scoreType = 'std', # std as we have both pos and neg rankings
-    minSize = 10, # otherwise I only get pathways with 2-5 genes
-    maxSize = 500,
-  )
-  file_csv <- file.path(dir_tab, paste0("goterms_svse_lin", lineage, ".csv"))
-  # write_csv won't work for the last column, as it's a list column
-  gsea_res |>
-     mutate(leadingEdge = map_chr(leadingEdge, str_c, collapse = ";")) |>
-     write_csv(file_csv)
-  
-  ## Create a visualization
-  top_pathways <- gsea_pathway_selection(
-    gsea_res, 
-    n_up = number_of_top_pathways_up,
-    n_down = number_of_top_pathways_down
-    )
-  p_gsea <- plotGseaTable(
-    gene_sets[top_pathways], 
-    stats = gene_scores, 
-    fgseaRes = gsea_res,
-    headerLabelStyle = list(size = 14),
-    pathwayLabelStyle = list(size = 12),
-    valueStyle = list(size = 10),
-    gseaParam = 0.5 # Makes the figure clearer
-    )
-  plots_gsea[[lineage]] <- p_gsea
-}
-
-patch <- plots_gsea[[1]] / plots_gsea[[2]] / plots_gsea[[3]] +
-  plot_annotation(
-    tag_levels = "A", 
-    theme = theme(
-        plot.tag = element_text(
-          face = "bold", 
-          size = 14, 
-          hjust = 0, vjust = 0
-          )
-      )
-    )
-save_plot(patch, "mrp_supfig10", width = 17, height = 20,
-          apply_theme = FALSE)
-```
-
-
-### Lineage 1
 
 ```{r}
-#| label: fig-xx-start-vs-end-lin1-top-smoothers
-plots_svse1 <- plot_topgenes(
-  printable_lin1,
-  sce_tradeseq, counts, seu,
-  n_genes = n_topgenes_to_plot
-  )
-
-p_smoothers <- plots_svse1$smoothers
-p_smoothers
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin1-top-pca
-p_pca <- plots_svse1$feature_pca
-p_pca
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin1-top-umap
-p_umap <- plots_svse1$feature_umap
-p_umap
-```
-
-
-```{r}
-#| label: fig-xx-go-terms-lin1
-
-plots_gsea[[1]]
-```
-
-### Lineage 2
-
-```{r}
-#| label: fig-xx-start-vs-end-lin2-top-smoothers
-plots_svse2 <- plot_topgenes(
-  printable_lin2,
-  sce_tradeseq, counts, seu,
-  n_genes = n_topgenes_to_plot
-  )
-
-p_smoothers <- plots_svse2$smoothers
-p_smoothers
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin2-top-pca
-p_pca <- plots_svse2$feature_pca
-p_pca
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin2-top-umap
-p_umap <- plots_svse2$feature_umap
-p_umap
-```
-
-```{r}
-#| label: fig-xx-go-terms-lin2
-
-plots_gsea[[2]]
-```
-
-### Lineage 3
-
-```{r}
-#| label: fig-xx-start-vs-end-lin3-top-smoothers
-plots_svse3 <- plot_topgenes(
-  printable_lin3,
-  sce_tradeseq, counts, seu,
-  n_genes = n_topgenes_to_plot
-  )
-
-p_smoothers <- plots_svse3$smoothers
-p_smoothers
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin3-top-pca
-p_pca <- plots_svse3$feature_pca
-p_pca
-```
-
-```{r}
-#| label: fig-xx-start-vs-end-lin3-top-umap
-p_umap <- plots_svse3$feature_umap
-p_umap
-```
-
-```{r}
-#| label: fig-xx-go-terms-lin3
-
-plots_gsea[[3]]
+#| label: chunk-24-tabset-go-terms-start-vs-end-test
+#| output: asis
+#| fig-width: 8
+#| fig-height: 7
+print_tabset(plots_gsea, heading_level = 4)
 ```
 
 ## patternTest()
@@ -826,7 +718,7 @@ patternTest tests whether lineages follow different shapes.
 Same l2fc reasoning as with StartVsEndTest()
 
 ```{r}
-#| label: chunk-xx-pattern-test
+#| label: chunk-25-pattern-test
 
 res_pat <- patternTest(sce_tradeseq, l2fc = log2(2))
 
@@ -835,71 +727,55 @@ printable_pat
 
 ```
 ```{r}
-#| label: fig-xx-pattern-test-top-smoothers
+#| label: chunk-26-pattern-test-top-smoothers
 plots_pat <- plot_topgenes(
   printable_pat,
   sce_tradeseq, counts, seu,
   n_genes = n_topgenes_to_plot
   )
-
-p_smoothers <- plots_pat$smoothers
-p_smoothers
 ```
 
 ```{r}
-#| label: fig-xx-pattern-test-top-pca
-p_pca <- plots_pat$feature_pca
-p_pca
+#| label: chunk-27-tabset-pattern-test
+#| output: asis
+print_tabset(plots_pat, heading_level = 3)
 ```
 
-```{r}
-#| label: fig-xx-pattern-test-top-umap
-p_umap <- plots_pat$feature_umap
-p_umap
-```
-
-## Known markers
+## Known reactive astrocyte markers
 
 ```{r}
-#| label: fig-xx-known-markers-smooth
-genes_rea <- c("C3", "SERPING1", "CHI3L1", "OSMR", "HSPB1", "PRDX6", "VIM", "CRYAB")
-
+#| label: chunk-28-rea-markers-visualizations
 plots_mark <- plot_topgenes(
-  genes_rea,
+  mark_rea,
   sce_tradeseq, counts, seu,
   printable_results_input = FALSE,
   ncol = 4,
   raster = TRUE
   )
+```
 
+```{r}
+#| label: chunk-29-tabset-rea-markers
+#| output: asis
+print_tabset(plots_mark, heading_level = 3)
+```
+
+```{r}
+#| label: chunk-30-supfig8
+#| echo: false
 p_smoothers <- plots_mark$smoothers
-p_smoothers
-
 # I will save this directly to disk as supplementary figure 8
 save_plot(p_smoothers, "mrp_supfig8", width = 17, height = 12, 
           apply_theme = FALSE)
 ```
 
-```{r}
-#| label: fig-xx-known-markers-top-pca
-p_pca <- plots_mark$feature_pca
-p_pca
-```
-
-```{r}
-#| label: fig-xx-known-markers-top-umap
-p_umap <- plots_mark$feature_umap
-p_umap
-```
-
-
 ## Figures for manuscript
 
 ```{r}
-#| label: chunk-xx-figures-for-manuscript
-
-# GPC5 and HPSE2 are a little special, because I'm also plotting the UMAP
-
+#| label: chunk-31-figures-for-manuscript
+#| echo: false
+# For my manuscript, I wanted to plot some specific genes, but this became a
+# little messy; it's a hidden chunk on purpose
 p_smooth_gpc5 <- plotSmoothers(
       sce_tradeseq, counts, 
       alpha = 0.1, size = 0.1, lwd = 0.4,
@@ -928,7 +804,7 @@ p_umap_gpc5 <- FeaturePlot(
 p_smooth_hpse2 <- plotSmoothers(
       sce_tradeseq, counts, 
       alpha = 0.1, size = 0.1, lwd = 0.4,
-      gene = "GPC5"
+      gene = "HPSE2"
     )  + 
   theme_manuscript() +
   labs(title = "HPSE2") +
@@ -1000,10 +876,6 @@ leg <- cowplot::get_legend(p_leg)
 saveRDS(leg, file.path(dir_man, "F5legend.rds"))
 
 ```
-
-
-
-
 
 # Session info
 

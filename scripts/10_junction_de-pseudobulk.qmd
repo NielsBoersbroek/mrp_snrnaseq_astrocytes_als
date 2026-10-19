@@ -98,23 +98,6 @@ library(ensembldb) # To get transcript information
 ### Directories
 
 ```{r}
-#| label: chunk-02-packages
-
-library(tidyverse)
-library(here)
-library(knitr)
-library(Seurat)
-library(scales)
-library(DESeq2)
-library(AnnotationHub)
-library(ensembldb)
-# These Bioconductor packages (AnnotationHub and ensembldb) contain functions
-# with the same name as several dplyr functions (select, filter, etc.), so I
-# needed to specify those with dplyr:: thoroughout this script
-
-```
-
-```{r}
 #| label: chunk-03-directories
 ##  Set directories ------------------------------------------------------------
 
@@ -298,7 +281,7 @@ save_plot <- function(
     }
     # Add manuscript-specific theme, unless the plot has its own custom theme
     if (apply_theme) {
-      p <- p + theme_manuscript(legend_pos_manuscript)
+      p <- p + theme_manuscript(legend_position = legend_pos_manuscript)
     }
     file_rds <- file.path(dir_man, paste0(figure, ".rds"))
     # Convert the object to a grob if needed
@@ -432,7 +415,7 @@ plot_ma <- function(res, gene, alpha = 0.05) {
 
 The functions below draw an exon junction relative to a reference transcript from the Ensembl database. They are used in the section on exon junction plots at the end of this document.
 
-`get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble. (I used to paste this code every time I needed it.)
+`get_gene_exons()` extracts the exon table of a gene from the EnsDb as a tibble.
 
 ```{r}
 #| label: chunk-08-helper-get-gene-exons
@@ -785,7 +768,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
     # needs to be lower if it's a junction spanning a lot of distance
     # I let users add it manually (with default 2), turn it negative if on
     # forward strand and positive if on reverse strand
-    if (exons_ref$seq_name[1] == 1) {
+    if (exons_ref$seq_strand[1] == 1) {
       curvature_arrow <- -abs(curvature_arrow)
     } else {
       curvature_arrow <- abs(curvature_arrow)
@@ -809,7 +792,7 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
         )
     # Rename pos1 and pos2 to x and xend; which becomes which depends on the
     # strand
-    if (exons_ref$seq_name[1] == 1) {
+    if (exons_ref$seq_strand[1] == 1) {
       junctions_tibble <- junctions_tibble |>
         dplyr::rename(x = pos1, xend = pos2)
     } else {
@@ -1057,8 +1040,7 @@ for (gene in genes) {
       sample_var = sample_var, 
       condition_var = condition_var,
       ref_level = ref_level, 
-      test_level = test_level,
-      covariate_vars = covariate_vars
+      test_level = test_level
     ),
     error = function(e) {
       cat("  DESeq2 failed for", gene, ":", conditionMessage(e), "\n")
@@ -1269,7 +1251,7 @@ print_tabset(junction_plots_anxa11)
 ```
 
 ```{r}
-#| label: chunk-xx-dispaly-significant-gfap-junction
+#| label: chunk-xx-display-significant-gfap-junction
 
 gene <- "GFAP"
 junction <- "chr17:44905781:44908063"
@@ -1294,7 +1276,8 @@ save_plot(
 tx_hits <- which_known_transcript(junction, exons_gene, 
                                   type = "acceptor", tolerance = 0)
 tx_hits
-nrow(tx_hits)
+
+
 ref_list <- reference_structure(gene, exons_gene, transcript = tx_hits$tx_id[1],
                                 include_utr = TRUE) # no UTR available
 visualize_junction(ref_list, gene, junction = junction, exons_gene = exons_gene)
