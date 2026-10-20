@@ -53,6 +53,7 @@ format:
     fig-height: 6
     toc: true # right-hand table of contents per page
     toc-depth: 3
+    toc-expand: 2
     toc-title: Table of contents
     grid:
       sidebar-width: 250px
