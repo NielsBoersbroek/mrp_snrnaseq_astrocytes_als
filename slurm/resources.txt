@@ -1,4 +1,4 @@
-# script                                    env              python_env   mem     time      cpus
+# script                                    env              python_env   mem     time    cpus
 scripts/01_subsetting_astros.qmd            r_scrnaseq_core  -            64G   00:30:00  1
 scripts/02_clustering.qmd                   r_scrnaseq_core  py_scrnaseq  32G   01:00:00  1
 scripts/03_trajectory_slingshot.qmd         r_scrnaseq_core  -            32G   03:00:00  1
