@@ -59,7 +59,7 @@ Rendering of Quarto also creates `_site/` (the website), `_freeze/` (stored resu
 
 You need a SLURM cluster, a conda installation (for example [miniforge](https://github.com/conda-forge/miniforge)) and the input data. Quarto, R and Python are all installed inside the conda environments, so nothing else has to be installed separately. Without SLURM, you can still render each document manually (see [Rendering a single document](#rendering-a-single-document)).
 
-## Data
+### Data
 
 No data are included in this repository, because they are sensitive patient data. The scripts expect:
  
@@ -145,4 +145,4 @@ The scripts find the project root with the `here` package, using the `.here` fil
 
 ## Declaration of AI use
  
-I come from a biomedical sciences background with little coding experience and chose a bioinformatics internship. As the point of this internship was to learn to code, I steered clear of having LLMs write the code for me. However, I occasionally used Claude (Anthropic) as a tutor and code reviewer throughout the internship: to explain errors I could not solve on my own, to review drafts for bugs, structure and reproducibility, and to set exercises that led me towards the code - I always instructed it not to give me code directly, unless specified otherwise. Suggestions occasionally came with a short illustrative snippet or a pointer to a technique (for example, converting plots to static grobs before saving them for the manuscript figures), which I then implemented in my own code. However, my priority was to learn how to code myself, and I can confidently say I did so during this internship: I can always lean on LLMs for speed later; I wanted to learn the fundamentals first.
+I come from a biomedical sciences background with little coding experience and chose a bioinformatics internship: the point of this internship literally was to learn how to code. Therefore, I steered clear of having LLMs write the code for me. However, I occasionally used Claude (Anthropic) as a tutor and code reviewer throughout the internship: to explain errors I could not solve on my own, to review drafts for bugs, structure and reproducibility, and to set exercises that led me towards the code - I always instructed it not to give me code directly, unless specified otherwise. Suggestions occasionally came with a short illustrative snippet or a pointer to a technique (for example, converting plots to static grobs before saving them for the manuscript figures), which I then implemented in my own code. However, my priority was to learn how to code myself, and I can confidently say I did so during this internship: I can always lean on LLMs for speed later; I wanted to learn the fundamentals first.
