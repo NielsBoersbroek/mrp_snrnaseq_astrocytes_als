@@ -6,7 +6,7 @@ date: "September 29, 2026"
 
 # About this analysis
 
-[Introduction text here: what does this script do, why, and how does it fit into the rest of the project?]
+Cell composition analysis with scCODA tests differences in cell abundance across variables, but can only do so at the level of coarse clusters. Milo allows for a more granular approach, calculating partially overlapping neighborhoods and testing their enrichment.
 
 ```{r}
 #| label: chunk-01-setup
@@ -108,9 +108,9 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
 
-### [Substantiation of choice]
+### k
 
-I tested Milo for multiple values of `k` (the K used for KNN graph building), but it had little effect on results. I therefore ended up using the default `k` value, which is 10
+I tested Milo for multiple values of `k` (the K used for KNN graph building), but it had little effect on results. I therefore ended up using the default `k` value, which is 10.
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -245,7 +245,7 @@ print_tabset <- function(obj_list, heading_level = 3) {
 
 ## Convert Seurat to Milo object
 
-[Narrative text explaining what this step does and why.]
+Milo requires its own type of object, the "Milo object". To do so, I first had to convert my Seurat object to an sce object, after which I could turn the sce object into a milo object.
 
 ```{r}
 #| label: chunk-08-open-seurat
@@ -253,7 +253,7 @@ file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 seu <- readRDS(file_rds)
 
 ## Seurat needs to be converted to sce
-# Convert to an sce object, as slingshot does not work on seurat
+# Convert to an sce object
 sce <- as.SingleCellExperiment(seu)
 # Milo requires a specific milo-object. The major differences between the Milo
 # and SingleCellExperiment object are in the extra slots of the Milo object,
@@ -298,7 +298,7 @@ milo <- makeNhoods(
 
 ```
 
-If the number of cells per neighborhood is too low, I should adapt the k parameter (tutorial recommends to have the distribution peaking above 20).
+If the number of cells per neighborhood is too low, I should adapt the k parameter (tutorial recommends to have the distribution peaking above 20). It works well with my set k.
 
 ```{r}
 #| label: fig-01-nhoodsize
@@ -360,6 +360,8 @@ p_pval <- ggplot(da_results, aes(PValue)) +
 p_pval
 ```
 
+You can already see that the results are skewed - I have way more ALS-depleted neighborhoods than ALS-enriched neighborhoods. This likely stems from the fact that we have just 4 controls, but 20 ALS samples.
+
 ```{r}
 #| label: fig-03-logfc-volcano
 p_logfc <- ggplot(da_results, aes(logFC, -log10(SpatialFDR))) +
@@ -402,7 +404,8 @@ milo <- buildNhoodGraph(milo)
 
 plotNhoodGraphDA directly visualizes the da_results, whereas plotNhoodGroups
 plots the groups created with groupNhoods.
-The alpha is the FDR significance threshold (0.05 is default)
+The alpha is the FDR significance threshold (0.05 is default).
+You can see that there are no clear ALS-enriched or -depleted populations.
 
 ```{r}
 #| label: fig-04-nhood-da
@@ -422,7 +425,7 @@ p_nhood_groups
 p_nhood_da + p_nhood_groups
 ```
 
-Also test one where I do not set a significant threshold at all.
+Also test one where I do not set a significant threshold at all. Even then, you do not see clear ALS-enriched or -depleted populations.
 
 ```{r}
 #| label: fig-07-nhood-da-loose

@@ -6,8 +6,6 @@ date: "October 5, 2026"
 
 # About this analysis
 
-<!-- TODO (Niels): this intro is a first draft, adapt it to your own words. Fill in the [name] credit. -->
-
 The nuclei in this project were sequenced twice: half of each barcoded library with short-read and half with long-read sequencing. Scripts 01-07 analysed the short-read data. This script (together with 09 and 10) uses the long-read data to look at **exon junctions**: places where a read goes from one exon to the next on the reference genome, where each junction is stored as a string `chr:start:end`. We created a junction count matrix, in which each each column is a nucleus  and each row is a junction, which can easily be turned into a Seurat object (a regular Seurat object has the genes as rows, instead of junctions). Because the nuclei are the same as in the short-read data, I can transfer the short-read annotation and dimensionality reductions to the junction data.
 
 The script has two parts:
@@ -15,7 +13,7 @@ The script has two parts:
 1. **Junction matrix and QC.** I load the junction count matrix, filter junctions, compute per-nucleus QC metrics (including the fraction of reads from known / novel junctions), filter nuclei and store the result as a Seurat object. The code of this part was originally written by [name]; I rewrote it to understand how it works.
 2. **Astrocyte selection and gene-specific preprocessing.** I select the astrocytes (the barcodes of the short-read astrocyte object), transfer the cluster `annotation`, PCA and UMAP, filter junctions again within astrocytes and then create one Seurat object per gene of interest. These are normalised with TF-IDF (junction matrices are even sparser than gene expression matrices) and stored for scripts 09 (differential expression between clusters) and 10 (pseudobulk differential expression, ALS vs control).
 
-The helper functions at the bottom of the preparation section also include the functions that draw an exon junction relative to a reference transcript. These are not used in the analysis yet: I will select the junctions to plot after looking at the results of 09 and 10.
+**Disclaimer:** the code within part 1 this script was actually not written by me: I recieved an Rscript with this code from Tom van Schaik. I did convert all steps to a Quarto format and feel like I fully understand what is happening, but I do not claim credit for this code.
 
 ```{r}
 #| label: chunk-01-setup
@@ -29,45 +27,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-# TODO: check that this path is the path of this repo
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directories
-dir_raw <- file.path(dir_home, "data/raw")
-dir_data <- file.path(dir_home, "data/processed")
-dir_temp <- file.path(dir_home, "data/temporary")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "08_astrocyte_junction_seurat"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/11_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -90,8 +49,6 @@ library(scales)
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -121,15 +78,12 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
 
-### [Substantiation of choice]
-
 ```{r}
 #| label: chunk-04-defining-variables
 set.seed(42)
 
 ## Input files -----------------------------------------------------------------
 
-# read_19
 dir_longread <- file.path(dir_raw, "longread")
 file_cell_meta <- file.path(dir_longread, "cell_metadata.tsv.gz")
 file_junc_feat <- file.path(dir_longread, "junction_features.tsv.gz")

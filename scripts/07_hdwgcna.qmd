@@ -6,7 +6,9 @@ date: "October 2, 2026"
 
 # About this analysis
 
-This script identifies co-expression modules in the astrocytes with hdWGCNA, the high-dimensional version of WGCNA for single-cell data. Because single-nuclei data is sparse, hdWGCNA first aggregates similar cells into *metacells*, then builds a co-expression network on them, and finally assigns genes to modules. The modules are examined (hub genes, module eigengenes on the UMAP) and annotated with GO terms.
+This script identifies co-expression modules in the astrocytes with hdWGCNA, the high-dimensional version of WGCNA for single-cell data. Because single-nuclei data is sparse, hdWGCNA first aggregates similar cells into *metacells*, then builds a co-expression network on them, and finally assigns genes to modules. The modules are examined (hub genes, module eigengenes on the UMAP).
+
+Unfortunately, not too much time to investigate this. I planned on running GO-terms on it all, but did not manage to do so.
 
 ```{r}
 #| label: chunk-01-setup
@@ -20,47 +22,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directories
-dir_data <- file.path(dir_home, "data/processed")
-# Directory for the topological overlap matrix (TOM). 
-# In the analysis, hdWGCNA creates a large binary file called the TOM file,
-# which I'll store in a temporary folder
-dir_tom <- file.path(dir_home, "data/temporary/hdwgcna_tom")
-dir.create(dir_tom, recursive = TRUE, showWarnings = FALSE)
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "07_hdwgcna"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -85,8 +46,6 @@ library(fgsea) # For running GSEA
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -117,9 +76,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
-
-### [Substantiation of choice]
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here.
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -287,7 +244,7 @@ seu <- SeuratObject::UpdateSeuratObject(seu)
 
 ## Selecting genes
 
-I select genes by fraction, as I only want to include genes expressed in at least 5% of cells (as defined under the header "Define Variables".
+I select genes by fraction, as I only want to include genes expressed in at least 5% of cells (as defined under the header **Define Variables**).
 
 ```{r}
 #| label: chunk-09-setup-wgcna
@@ -335,7 +292,7 @@ seu <- SetDatExpr(
 
 # Selecting the soft power threshold
 
-The soft power threshold is extremely important in WGCNA: it acts as a Boolean-like threshold separating strong from weak connections in the correlation matrix, a step essential to reduce noise. `TestSoftPowers()` runs a parameter sweep. One should pick the lowest soft power with a scale-free topology (SFT) model fit greater than or equal to 0.8. In my case, that was at 12, so I set that as the threshold (defined in the section "Define Variables")
+The soft power threshold is extremely important in WGCNA: it acts as a Boolean-like threshold separating strong from weak connections in the correlation matrix, a step essential to reduce noise. `TestSoftPowers()` runs a parameter sweep. One should pick the lowest soft power with a scale-free topology (SFT) model fit greater than or equal to 0.8. In my case, that was at 12, so I set that as the threshold.
 
 ```{r}
 #| label: chunk-12-test-soft-powers
@@ -382,7 +339,8 @@ seu <- ConstructNetwork(
   seu,
   soft_power = soft_power, # selected based on TestSoftPowers()
   tom_name = "hdwgcna_astros",
-  tom_outdir = dir_tom
+  tom_outdir = dir_tom,
+  overwrite_tom = TRUE
 )
 ```
 
@@ -508,6 +466,8 @@ save_plot(
 
 ```{r}
 #| label: fig-xx-moduleradarplot
+#| fig-width: 10
+#| fig-height: 7
 p_module_radar <- ModuleRadarPlot(
   seu,
   group.by = 'annotation',

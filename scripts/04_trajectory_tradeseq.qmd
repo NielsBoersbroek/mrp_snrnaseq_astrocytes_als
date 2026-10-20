@@ -6,7 +6,7 @@ date: "October 1, 2026"
 
 # About this analysis
 
-TradeSeq allows you to examine gene expression changes after inferring pseudotime with another package (the tradeSeq vignette literally starts from a slingshot object). It uses a negative binomial generalized additive model.
+tradeSeq is a natural follow-up of Slingshot: it examines gene expression changes after inferring pseudotime with another package - and the tradeSeq vignette literally starts from a slingshot object.
 
 ```{r}
 #| label: chunk-01-setup
@@ -20,42 +20,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directory
-dir_data <- file.path(dir_home, "data/processed")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "04_trajectory_tradeseq"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/11_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -81,8 +45,6 @@ library(ggrastr) # To rasterize dot plots, otherwise figure-files balloon
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -110,15 +72,26 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
 
-### [Substantiation of choice]
+### filter_min_pt
 
 filter_min_pt selects the threshold for the percentage of cells a gene must be expressed in to be included for fitGAM(). Deliberately set high (at 10%) as fitGAM has a high computing time and takes up a lot of memory (it didn't make it with 128GB if I set it at 5%)
 
+### n_top_genes_to_plot
+
+The number of genes to plot with Smoothers, pca and umpa per test. I set it at 20 as this quickly allowed me to examine many genes.
+
+### number_of_top_pathways
+
+In contrast to the `FindMarkers` GO-terms in script 02, I'm more interested in downregulated pathways across lineages, so I set it to 10:10 instead of 0:20.
+
+### mark_rea
+
+Same selection as previous.
+
 ```{r}
 #| label: chunk-04-defining-variables
-
 filter_min_pt <- 10
-# I want to inspect many genes
+
 n_topgenes_to_plot <- 20
 
 # Decide how many plots you want to make for the upregulated and downregulated
@@ -234,6 +207,8 @@ save_plot <- function(
 
 Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with `print_tabset()`. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option `#| output: asis`. `heading_level` should be one deeper than the heading above the chunk.
 
+I added head in this script as a quick fix; otherwise I'd print tables of 100+ genes
+
 ```{r}
 #| label: chunk-07-helper-print-tabset
 print_tabset <- function(obj_list, heading_level = 3) {
@@ -244,7 +219,7 @@ print_tabset <- function(obj_list, heading_level = 3) {
     if (inherits(obj, "ggplot")) {
       print(obj)
     } else if (is.data.frame(obj)) {
-      cat(knitr::kable(obj, format = "pipe"), sep = "\n")
+      cat(knitr::kable(head(obj, 20), format = "pipe"), sep = "\n")
     }
     cat("\n\n")
   }
@@ -254,13 +229,11 @@ print_tabset <- function(obj_list, heading_level = 3) {
 
 ### printable_results()
 
-For each test I'll run with tradeSeq, I'll want to perform multiple tests and print the most interesting result of each test (significant adjusted p-value, sort descending by fold change). The function `print_test_table` works for the three test I'll run (`associationTest()`, `startVsEndTset()` and `patternTest()`) - all are a little different, so I needed to adjust the code a little for each one. startVsEndTest() provides results for all lineages seperately, so the argument `lineage` provides of which lineage one wants results. 
+For each test I'll run with tradeSeq, I'll want to perform multiple tests and print the most interesting result of each test (significant adjusted p-value, sort descending by fold change). The function `print_test_table` works for the three test I'll run (`associationTest()`, `startVsEndTset()` and `patternTest()`) - all are a little different, so I needed to adjust the code a little for each one. startVsEndTest() provides results for all lineages seperately, so the argument `lineage` provides of which lineage one wants results. Some notes: 
 
-tradeSeq does not automatically adjust p-values, so I do that for each.
-
-I sort by asbolute values, so I see both positive and negative fold changes
-
-I want all results automatically saved on disk, but there is the option to turn this off
+1. tradeSeq does not automatically adjust p-values, so I do that for each.
+2. I sort by asbolute values, so I see both positive and negative fold changes
+3. I want all results automatically saved on disk, but there is the option to turn this off
 
 ```{r}
 #| label: chunk-08-helper-printable-results
@@ -405,8 +378,8 @@ plot_topgenes <- function(gene_input, sce = NULL, counts = NULL,
 `prepare_gsea()` prepares for `fgsea()` by creating a gene ranking. I will only run gsea on the results of `startVsEndTest()`. I defined this function in a previous script (02_clustering.qmd) as well, but there, I used it to run GO-term enrichment on the output of FindMarkers(), so it looks a little different there as it had a different input. The logic is the same.
 
 Two ways to sort: 
-- `logfc`: directly by logfc
-- `signed_logp`: -log10(p-value), with the sign (+/-) of the logFC
+1. `logfc`: directly by logfc
+2. `signed_logp`: -log10(p-value), with the sign (+/-) of the logFC
 
 `gsea_pathway_selection()` is a quick little function which extracts the most upregulated and downregulated pathways of a FGSEA results table, mostly for visualization. The numbers for upregulated and downregulated pathways are defined in the "Define variables" section. This function as used previously
 
@@ -474,11 +447,9 @@ gsea_pathway_selection <- function(gsea_results, n_up = 10, n_down = 0) {
 
 </details>
 
-# [Analysis section 1: name it after what this part of the script actually does]
+# Running tradeSeq
 
-## [Subsection as needed]
-
-Open the sce with Slingshot results
+Open the sce with Slingshot results and parse what is necessary for tradeSeq.
 
 ```{r}
 #| label: chunk-11-open-sce
@@ -513,7 +484,7 @@ length(genes_keep)
 
 ```
 
-This is very computationally heavy; only run it if it has not yet been run before (i.e. if the file with the results is not yet stored on disk).
+This is very computationally heavy; only run it if it has not yet been run before (i.e. if the file with the results is not yet stored on disk). It also allows for parallel computing, but I ended up using just two cpu's as using more required a RAM of higher than 128GB.
 
 ```{r}
 #| label: chunk-13-run-fitgam
@@ -547,17 +518,21 @@ if(file.exists(file_rds)) {
 
 # Statistical tests
 
-For some of these visualizations, I'll use Seurat, so open the Seurat object
+For plotSmoothers visualizations, I need the sce after tradeseq has been run on it, as well as the counts table. I also made some plots with Seurat, so I need to load that in here as well.
 
 ```{r}
-#| label: chunk-14-open-seurat
+#| label: chunk-14-open-seurat-extract counts
+# Extract counts from the sce object
+counts <- counts(sce_tradeseq)
+
+# Open Seurat
 file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 seu <- readRDS(file_rds)
 ```
 
 ## associationTest()
 
-Associationtest finds genes which have general associations with lineages. These are not yet gene-specific.
+Associationtest finds genes which have general associations with lineages. These are not yet lineage-specific.
 
 ```{r}
 #| label: chunk-15-associaton-test
@@ -649,7 +624,7 @@ print_tabset(list_plots[["Lineage 3"]], heading_level = 4)
 
 ### GO-term enrichment
 
-For startVsEndTest(), I will also analyse trajectories with GO-term enrichment.
+For startVsEndTest(), I also analysed trajectories with GO-term enrichment. I did not do so for the other statistical tests, as these are not lineage specific.
 
 ```{r}
 #| label: chunk-23-go-terms-svset
@@ -714,8 +689,7 @@ print_tabset(plots_gsea, heading_level = 4)
 
 ## patternTest()
 
-patternTest tests whether lineages follow different shapes.
-Same l2fc reasoning as with StartVsEndTest()
+patternTest tests whether lineages follow different shapes. Same l2fc reasoning as with StartVsEndTest().
 
 ```{r}
 #| label: chunk-25-pattern-test
@@ -723,8 +697,7 @@ Same l2fc reasoning as with StartVsEndTest()
 res_pat <- patternTest(sce_tradeseq, l2fc = log2(2))
 
 printable_pat <- printable_results(res_pat, test = "pattern")
-printable_pat
-
+kable(head(printable_pat, 10))
 ```
 ```{r}
 #| label: chunk-26-pattern-test-top-smoothers
@@ -768,8 +741,6 @@ p_smoothers <- plots_mark$smoothers
 save_plot(p_smoothers, "mrp_supfig8", width = 17, height = 12, 
           apply_theme = FALSE)
 ```
-
-## Figures for manuscript
 
 ```{r}
 #| label: chunk-31-figures-for-manuscript

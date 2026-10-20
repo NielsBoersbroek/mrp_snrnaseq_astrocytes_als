@@ -6,7 +6,7 @@ date: "September 29, 2026"
 
 # About this analysis
 
-[Introduction text here: what does this script do, why, and how does it fit into the rest of the project?]
+Many studies previously examined astrocyte heterogeneity in ALS, but these mostly use discrete clustering, and we believe approaches which examine continuous changes have been underexplore. Therefore, we performed trajectory inference with Slingshot. This script infers the trajectories; the next script examines differential expression across trajectories with tradeSeq.
 
 ```{r}
 #| label: chunk-01-setup
@@ -20,42 +20,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directory
-dir_data <- file.path(dir_home, "data/processed")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "03_trajectory_slingshot"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -80,8 +44,6 @@ library(ggrastr) # To rasterize dot plots, otherwise figure-files balloon
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -109,11 +71,17 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
 
-### [Substantiation of choice]
+### res
 
 Slingshots requires you to run a clustering before you run Slingshot, as the trajectory inference depends on clustering. I will not add my annotated clusters from script `02_clustering.qmd`; that just draws a trajectory across my clusters. I deliberately set a higher resolution. I tested it for multiple resolutions; none really made sense, 0.5 did the most, so I chose 0.5
 
+### reduction
+
 Reduction sets the dimensionality reduction. I used 'harmony', the integrated PCA. In converting Seurat to a SingleCellExperiment object, dimensionality reductions get put into capslock; thus, I also entered it in capslock.
+
+### vars_ridges
+
+I examined how pseudotime of lineages linked with metadata variables using ridgeplots; with pTDP-43 stage, primary site of onset, and disease subtypes, I can find direct links with ALS-pathology. I added gender as a sanity check and added anonymousID to see whether individual samples drive a certain signal.
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -351,9 +319,9 @@ parse_slingshot <- function(sce, reduction_plot = reduction,
 
 ### plot_pseudotime()
 
-For the line of a lineage, I added two geom_paths: one black and one white. That makes a black line with a white border around it, which makes it easier to see, I think.
+`plot_pseudotime()` creates a scatterplot with the color indicating pseudotime and an overlaying line of the trajectory. I provided the option to either display individual lineages (as a facetted plot) or to display the average across lineages.
 
-I applied ggrastr::geom_point_rast, as that makes the pdf size managable for LaTeX
+For the line of a lineage, I added two geom_paths: one black and one white. That makes a black line with a white border around it, which makes it easier to see, I think. I also applied ggrastr::geom_point_rast, as that makes the pdf size of manuscript figures managable.
 
 ```{r}
 #| label: chunk-09-helper-plot-pseudotime
@@ -418,6 +386,8 @@ plot_pseudotime <- function(
 
 ### plot_pseudotime_by()
 
+`plot_pseudotime_by()` plots how pseudotime abundance is associated with metadata variables.
+
 ```{r}
 #| label: chunk-10-helper-plot-pseudotime-by
 
@@ -458,7 +428,7 @@ file_rds <- file.path(dir_data, "seu_shortread_astros_clustered.rds")
 seu <- readRDS(file_rds)
 ```
 
-Slingshot requires you to cluster your data before running Slingshot. I defined this in the section 'define variables'
+Slingshot requires you to cluster your data before running Slingshot. I defined the resolution in the section **Define variables**.
 
 ```{r}
 #| label: chunk-12-precluster
@@ -506,6 +476,8 @@ saveRDS(sce, file_rds)
 
 # Parsing the results
 
+For my visualizations, I need the put input in specific formats, for which I defined the function `parse_results()`.
+
 ```{r}
 #| label: chunk-17-parse-results
 pseudotime_list_harm <- parse_slingshot(
@@ -522,6 +494,8 @@ pseudotime_list_umap <- parse_slingshot(
 ```
 
 # Visualization
+
+Visualizations are made with functions I defined myself, `plot_pseudotime()` and `plot_pseudotime_by()`.
 
 ## Plots Harmony reduction
 
@@ -577,6 +551,8 @@ save_plot(p_pseu_umap_avg, "pseudotime_umap_avg", figure = "F5D",
 ```
 
 ## Ridgeplots
+
+These ridgeplots display how abundance of cells with a certain pseudotime overlay with metadata variables.
 
 ```{r}
 #| label: fig-05-ridgeplot-sample

@@ -6,8 +6,6 @@ date: "October 5, 2026"
 
 # About this analysis
 
-<!-- TODO (Niels): this intro is a first draft, adapt it to your own words. -->
-
 In script 08 I created gene-specific junction Seurat objects of the astrocytes, with the dimensionality reductions and cluster annotation I made with the short-read data transferred to it. In this script I test which junctions of a gene are differentially expressed **between the astrocyte clusters**, using Seurat's `FindAllMarkers()` (each cluster versus all other clusters). The next script (10) tests differential expression between ALS and controls with a pseudobulk approach.
 
 For every gene, the full results are stored as a `.csv`, a dotplot of the top junctions is displayed, and a multi-page PDF with a UMAP feature plot and a violin plot for every junction is saved to disk for inspection.
@@ -24,54 +22,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-# TODO: check that this path is the path of this repo
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directories
-dir_raw <- file.path(dir_home, "data/raw")
-dir_data <- file.path(dir_home, "data/processed")
-dir_temp <- file.path(dir_home, "data/temporary")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "09_junction_de-cluster"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/11_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-
-## Cache directory
-# For this script, I'm setting a cache directory; this is specific for the
-# ensembldb loading for the exon junction plots. AnnotationHub downloads the 
-# database to a cache folder. If I wouldn't manually set it, it would use the 
-# cache of my home directory instead ("/home/hers_en/nboersbroek"), which only 
-# has 7 GB space
-dir_cache <- file.path(dir_temp, "annotationhub_cache")
-dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
-```
 
 ### Packages
 
@@ -97,8 +47,6 @@ library(ensembldb) # To get transcript information
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -136,8 +84,6 @@ dir.create(dir_cache, recursive = TRUE, showWarnings = FALSE)
 ## Defining variables
 
 This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
-
-### [Substantiation of choice]
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -751,12 +697,13 @@ visualize_junction <- function(ref, gene, junction = NULL, exons_gene = NULL,
 
 ### which_known_transcript()
 
+All helper functions to plot exon junctions were created by me; this forms the only exception. I designed this function together with Claude, with Claude writing most of the code. This was a deliberate choice: by creating all these functions, I already became quite skilled in writing them, so it did not feel wrong to delegate this one to an LLM, as most of my learning already occured.
+
 By default, I print the exon junction on the canonical transcript, but I often find junctions which are in catalogue but which are not in the canonical transcript. I wrote the function `which_known_transcript()` to find the transcript in which such a known-but-not-in-canonical exon junction sits. You need to provide the junction and exons_gene output. Returns a tibble with one row per matching transcript. The offsets are (catalogued boundary - my site) in TRANSCRIPT direction: positive = the catalogued boundary lies downstream of my site, negative = upstream.
 
 Arguments of the function:
-- type: what type of site to look for. "donor" or "acceptor" (only search for that site), "full" (donor and acceptor are consecutive exons in the transcript = known junction), "both" (donor and acceptor both exist in the transcript, not nec. consecutive; includes "full"), "auto" (default; strictest level which returns whatever matched it best)
-- tolerance: maximum distance in bp between my site and a catalogued exon boundary. 0 = exact match; use e.g. 10 to find the nearest described junction for a novel one.
-"auto" (default; strictest level which returns >= 1 transcript: full > both > donor/acceptor), "full" (donor and acceptor are
+1. type: what type of site to look for. "donor" or "acceptor" (only search for that site), "full" (donor and acceptor are consecutive exons in the transcript = known junction), "both" (donor and acceptor both exist in the transcript, not nec. consecutive; includes "full"), "auto" (default; strictest level which returns whatever matched it best)
+2. tolerance: maximum distance in bp between my site and a catalogued exon boundary. 0 = exact match; use e.g. 10 to find the nearest described junction for a novel one.
 
 ```{r}
 #| label: chunk-xx-helper-which-known-transcript
@@ -1064,8 +1011,6 @@ table_manuscript <- table_manuscript |>
       )
     )
 
-table_manuscript
-
 file_csv <- file.path(dir_tab, "junctions_de_clusters_manuscript.csv")
 write_csv(table_manuscript, file_csv)
 
@@ -1136,6 +1081,8 @@ for (gene in names(top_tables)) {
 
 ## GFAP
 
+The tabset below displays all significant GFAP junctions on the canonical transcript.
+
 ```{r}
 #| label: chunk-xx-display-gfap-junctions
 #| output: asis
@@ -1146,6 +1093,8 @@ print_tabset(junction_plots_gfap)
 ```
 
 ## ANXA11
+
+The tabset below displays all significant ANXA11 junctions on the canonical transcript.
 
 ```{r}
 #| label: chunk-xx-display-anxa11-junctions
@@ -1159,6 +1108,8 @@ print_tabset(junction_plots_anxa11)
 
 
 ## Summary plots
+
+For my written report, I wanted all significant junctions displayed along the canonical transcript, with a label which would allow me to easily reference them in text.
 
 ```{r}
 #| label: fig-xx-summary-plot-gfap
@@ -1234,6 +1185,8 @@ p_junc_summary_anxa
 ```
 
 ## Non-canonical junctions of GFAP
+
+I observed several significant non-canonical splicing events of GFAP. I wanted to display these on transcripts which matches them. I print the tibble with the results of `which_known_transcript()` - while you cannot see everything within it, you can see how many transcripts match it (and printing it with `kable()` became to broad a table to fit on the page, so I settled for the tibble).
 
 ### Exon-skipping of exon 2 (chr17:44913824:44915025)
 

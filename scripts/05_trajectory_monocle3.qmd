@@ -6,7 +6,9 @@ date: "October 2, 2026"
 
 # About this analysis
 
-This script runs Monocle3, a trajectory inference tool that scores consistently high in benchmark papers, on the clustered astrocyte Seurat object. I use the clustered object because the untrustworthy clusters have already been removed there. The Seurat object is converted to a `cell_data_set`, a trajectory graph is learned on the astrocyte UMAP, and pseudotime is calculated from a chosen root. Afterwards I run additional Monocle3 tests (`graph_test()`, gene modules, pseudotime per condition) to find genes that change along the trajectory.
+This script runs Monocle3, a trajectory inference tool that scores consistently high in benchmark papers, on the clustered astrocyte Seurat object. I use the clustered object because the untrustworthy clusters have already been removed there. The Seurat object is converted to a `cell_data_set`, a trajectory graph is learned on the astrocyte UMAP, and pseudotime is calculated from a chosen root. 
+
+I mainly ran monocle3 to test whether it constructs a similar trajectory as Slingshot; however, I found that monocle3 creates an incredibly detailed trajectory, but with only a single pseudotime scale, which makes it hard to do tests with it. I planned on running monocle3's tests, such as `graph_test()` which tests whether a gene's expression is spatially autocorrelated on the trajectory graph or `find_gene_modules()` which groups significant genes into modules of genes with similar behaviour along the trajectory, but unfortunately, due to the time constraints, I did not get to doing so .
 
 ```{r}
 #| label: chunk-01-setup
@@ -20,42 +22,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_monocle3`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-setwd("/path/to/folder/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directory
-dir_data <- file.path(dir_home, "data/processed")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "04_trajectory_monocle3"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -79,8 +45,6 @@ library(SeuratWrappers) # for as.cell_data_set()
 
 ```{r}
 #| label: chunk-03-directories
-##  Set directories ------------------------------------------------------------
-
 # Get string of home directory. I used the here package, which sets the home
 # directory when loading library(here)
 dir_home <- here::here()
@@ -106,9 +70,7 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
-
-### [Substantiation of choice]
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here.
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -123,8 +85,9 @@ reduction_cds <- toupper(reduction_seurat)
 # Metadata column used to colour the trajectory plots
 col <- "cluster"
 
-# Root principal point for pseudotime, change after running it
-root_node <- "Y_348"
+# Root principal point for pseudotime; you can select a root, but I did
+# not further explore this, so I randomly seleccted one.
+root_node <- "Y_67"
 ```
 
 ## Helper functions
@@ -456,7 +419,7 @@ p_pseudotime
 save_plot(p_pseudotime, "monocle3_pseudotime_root")
 ```
 
-monocle3 acutally has more cool tests, such as `graph_test()` which tests whether a gene's expression is spatially autocorrelated on the trajectory graph or `find_gene_modules()` which groups significant genes into modules of genes with similar behaviour along the trajectory, but unfortunately, I did not get to applying these.
+monocle3 acutally has more cool tests, such as `graph_test()` which tests whether a gene's expression is spatially autocorrelated on the trajectory graph or `find_gene_modules()` which groups significant genes into modules of genes with similar behaviour along the trajectory, but as stated previously, I did not get to applying these unfortunately.
 
 # Session info
 

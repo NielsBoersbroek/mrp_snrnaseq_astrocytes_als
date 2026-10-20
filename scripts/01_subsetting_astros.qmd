@@ -6,7 +6,7 @@ date: "September 21, 2026"
 
 # About this analysis
 
-This is the first script of this project. In this project, I analysed single-nuclei RNA sequencing (snRNAseq) data of post-mortem spinal cord tissue of 20 ALS patients and 4 controls, focusing on astrocytes. In this script, I will open the full dataset (with all celltypes), examine the astrocytes (e.g. what proportion of total cells they form per sample), and subset the astrocytes.
+This is the first script of this project. In this script, I will open the full dataset (with all celltypes), examine the astrocytes (e.g. what proportion of total cells they form per sample), and subset the astrocytes.
 
 ```{r}
 #| label: chunk-01-setup
@@ -20,43 +20,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ## Prerequisites
 
 This script was run with the *conda environment* `r_scrnaseq_core`.
-
-```{r}
-#| label: chunk-extra-setwd-remote-rstudio
-#| include: false
-#| eval: false
-# When examining this script on the remote RStudio server of the HPC, run this
-# chunk instead of chunk-03-directories: DO NOT RUN chunk-03-directories!!
-
-# The here package takes the home directory, but this is not automatically set
-# to the right one on the RStudio remote server.
-# Moreover, I use knitr::current_input(), but that does not work as an
-# interactive session on the RStudio server does not involve any knitting
-
-setwd("/hpc/hers_en/nboersbroek/projects/snrna_astros_shortread_postQC")
-
-# Get string of home directory. I used the here package, which sets the home
-# directory when loading library(here)
-dir_home <- getwd()
-
-## Data directories
-dir_data_in <- file.path(dir_home, "data/raw")
-dir_data_out <- file.path(dir_home, "data/processed")
-
-## Results directories
-# Create subfolders with the name of this script, so all figures/tables of
-# this script are in the same place
-folder_name <- "01_subsetting_astros"
-dir_fig <- file.path(dir_home, "results/figures", folder_name)
-dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
-dir_tab <- file.path(dir_home, "results/tables", folder_name)
-dir.create(dir_tab, recursive = TRUE, showWarnings = FALSE)
-
-## Manuscript figure directory 
-# rds/grob objects for report figures land here, to be assembled by
-# scripts/[XX]_assemble_manuscript_figures.qmd
-dir_man <- file.path(dir_home, "results/figures/manuscript")
-```
 
 ### Packages
 
@@ -107,9 +70,11 @@ dir_man <- file.path(dir_home, "results/figures/manuscript")
 
 ## Defining variables
 
-This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here
+This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I'll substantiate any choices here.
 
-### [Substantiation of choice]
+### astro_markers
+
+The first three are well-established astrocyte markers; OBI1-AS1 might be a bit of suprising one. Some recent studies (e.g. [Mamivand et al.](https://pubmed.ncbi.nlm.nih.gov/35260196/)) showed that this antisense RNA is highly specific for astrocytes.
 
 ```{r}
 #| label: chunk-04-defining-variables
@@ -297,7 +262,7 @@ bar_freq <- function(freq_table, freq_type = "fill", just_astro = FALSE) {
 
 ## Load Seurat in from disk
 
-The object `seu_shortread_allcelltypes_postQC.rds` was the object which \[name\] shared with me after her full QC.
+The object `seu_shortread_allcelltypes_postQC.rds` was the object which Charlotte shared with me after her full QC.
 
 ```{r}
 #| label: chunk-10-open-seurat
@@ -306,13 +271,13 @@ seu <- readRDS(file_rds)
 # Test whether it loaded in correctly
 seu
 ```
-The metadata can be structured a little better, so I'll do that now, and then it's changed for the rest of the scripts.
 
-Some ugliness in the metadata, I'm fixing it here, in the root.
-- In the column pTDP-43 stage, all controls and samples ALS17 and ALS18 are empty. For the controls, that's because they do not have ALS and no pTDP-43 pathology, but samples ALS17 and ALS 18 are empty because they have FUS ALS - which has a different pathology.
-- Only one sample has pTDP-43 stage 2, so I lumped it together with 3 - otherwise comparison with stage 2 always looks weird, because it has n = 1.
-- The controls have empty strings in the column `primary_site_of_onset`, set these to `"Ctrl"`.
-- There was not yet a column with `ALS` vs `Ctrl`, so I added the column `condition`.
+The metadata can be structured a little better, so I'll do that now, so that it's changed for all future analyses.
+
+1. There was not yet a column with `ALS` vs `Ctrl`, so I added the column `condition`.
+2. In the column pTDP-43 stage, all controls and samples ALS17 and ALS18 are empty. For the controls, that's because they do not have ALS and no pTDP-43 pathology, but samples ALS17 and ALS 18 are empty because they have FUS ALS - which has a different pathology. I added `"Ctrl"` and `"FUS ALS"` to solve these.
+3. The controls have empty strings in the column `primary_site_of_onset`, so I set these to `"Ctrl"`.
+4. Only one sample has pTDP-43 stage 2, so I lumped it together with 3 - otherwise comparison with stage 2 always looks weird, because it has n = 1
 
 ```{r}
 #| label: chunk-11-fix-metadata
@@ -349,11 +314,11 @@ seu@meta.data <- metadata
 
 ## Visualization annotation all celltypes
 
-\[name\] defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
+Charlotte defined major cell types using a publicly available atlas of the human spinal cord of the Allan Brain Insitute. These are stored in the columns `predicted.id_coarse_allen_subclass` and `predicted.id_coarse_allen_group`, with the latter having a more subdivided annotation than the former.
 
 ```{r}
 #| label: fig-01-umap-subclass
-#| fig-cap: "UMAP of all cell types, coloured by Allen subclass annotation"
+#| fig-cap: "UMAP of all cell types, coloured by Allen subclass annotation. The label size is set small; that is because I also saved this figure for my written report, where I required small labels."
 # I want to show both subclass and cellclass. First show subclass
 p_allen_subclass <- DimPlot(
   seu,
@@ -361,7 +326,7 @@ p_allen_subclass <- DimPlot(
   group.by = "predicted.id_coarse_allen_subclass",
   label = TRUE,
   repel = TRUE,
-  label.size = 2,
+  label.size = 2, # Small label size for manuscript figure
   raster = TRUE
   ) + 
   labs(x = "UMAP1", y = "UMAP2")
@@ -415,14 +380,15 @@ save_plot(p_feature, "allcelltypes_featureplot")
 ## Visualization astrocyte frequency
 
 I want to show how many astrocytes each sample has. I will create multiple types of barplots.
-- visualizations of proportional frequency and visualizations with relative frequency (as scRNAseq data is proportional)
-- visualizations with the frequency of all celltypes vs visualizations with just astrocytes vs non-astrocytes
+
+1. visualizations of proportional frequency and visualizations with relative frequency (as scRNAseq data is proportional)
+2. visualizations with the frequency of all celltypes vs visualizations with just astrocytes vs non-astrocytes
 
 This section uses the functions `calc_freq` and `bar_freq`, which I created myself in the section **Helper functions**.
 
 ### Frequency of all cell types
 
-I will visualize using the column `predicted.id_coarse_allen_subclass`, which is the same one as used in the first image under the header **Visualization annotation all celltypes**.
+I use the column `predicted.id_coarse_allen_subclass`, which is the same one as used in @fig-01-umap-subclass.
 
 ```{r}
 #| label: chunk-14-preprocessing-freq
@@ -493,6 +459,8 @@ freq_table <- calc_freq(metadata, "astro", "AnonymousID")
 # Show the top rows in the knitted file
 kable(head(freq_table))
 ```
+
+Only colouring astrocytes vs non-astrocytes makes it clearer to see at first glance.
 
 ```{r}
 #| label: fig-06-absolute-freq
