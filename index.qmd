@@ -2,14 +2,23 @@
 title: "Overview"
 ---
 
-This site contains the rendered analysis documents of my internship project:
-snRNA-seq of post-mortem spinal cord (ALS and controls), focused on astrocytes.
+This site shows the rendered analysis of my master's internship: single-nucleus RNA-seq of post-mortem spinal cord from ALS patients and controls, focused on astrocytes. Each page is a Quarto document with the code, output and reasoning of one analysis step. The code lives in the [GitHub repository](https://github.com/NielsBoersbroek/mrp_snrnaseq_astrocytes_als), whose README describes the project background and how to run everything yourself.
 
 ## Pipeline
 
-| Script | What it does | Environment |
+| Script | What it does | Conda environment |
 |--------|--------------|-------------|
-| [01 Subsetting astrocytes](scripts/01_subsetting_astros.qmd) | Subsets astrocytes from the full dataset | `r_scrnaseq_core` |
+| [1. Subsetting astrocytes](scripts/01_subsetting_astros.qmd) | Subsets astrocytes from the full dataset | `r_scrnaseq_core` |
+| [2. Clustering](scripts/02_clustering.qmd) | Preprocesses astrocytes into discrete groups, clusters them into discrete groups and annotates these groups | `r_scrnaseq_core` & `py_scrnaseq` |
+| [3. Trajectory inference with Slingshot](scripts/03_trajectory_slingshot.qmd) | Infers trajectories of transcriptional continuums across astrocytes | `r_scrnaseq_core` |
+| [4. DE across Slingshot's trajectories with tradeSeq](scripts/04_trajectory_tradeseq.qmd) | Tests which genes are differentially expressed across the trajectories inferred by Slingshot | `r_scrnaseq_core` |
+| [5. Trajectory inference with Monocle3](scripts/05_trajectory_monocle3.qmd) | Infers trajectories, using a different algorithm | `r_monocle3` |
+| [6. Differential abundance with Milo](scripts/06_milo.qmd) | Tests whether specific astrocyte subpopulations are enriched between ALS and control donors | `r_scrnaseq_core` |
+| [7. Gene modules with hdWGCNA](scripts/07_hdwgcna.qmd) | Finds networks of co-expressed genes across astrocytes | `r_scrnaseq_core` |
+| [8. Creating the astrocyte-junction Seurat](scripts/08_astrocyte_junction_seurat.qmd) | Creates a Seurat object with exon junction counts from the long-read data | `r_scrnaseq_core` |
+| [9. Junction differential expression; between astrocyte clusters](scripts/09_junction_de-cluster.qmd) | Tests differential exon usage between previously defined astrocyte clusters | `r_scrnaseq_core` |
+| [10. Junction differential expression; ALS vs control (pseudobulk)](scripts/10_junction_de-pseudobulk.qmd) | Tests differential exon usage between ALS and control samples (using pseudobulk) | `r_scrnaseq_core` |
+| [11. Assemble manuscript figures](scripts/11_assemble_manuscript_figures.qmd) | Assembles figure panels that combine plots from several scripts into the figures of my written report | `r_scrnaseq_core` |
 
-Scripts run in numbered order; each one reads the output of the earlier ones.
-See the repository README for setup and reproduction instructions.
+
+The scripts were run in numbered order, since later scripts need the output of earlier ones. For requirements, data, environments and running instructions, see the [README](https://github.com/NielsBoersbroek/mrp_snrnaseq_astrocytes_als)
