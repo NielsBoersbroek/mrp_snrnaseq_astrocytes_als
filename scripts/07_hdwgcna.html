@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Niels Boersbroek">
+<meta name="dcterms.date" content="2026-10-02">
+
+<title>7. Gene modules with hdWGCNA – snRNA-seq of Astrocytes in the ALS Spinal Cord</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../scripts/08_astrocyte_junction_seurat.html" rel="next">
+<link href="../scripts/06_milo.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-da2e07738be34b5dd37aa4c7240f6bd9.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+</head>
+
+<body class="nav-sidebar docked quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../scripts/01_subsetting_astros.html">Short-read analysis</a></li><li class="breadcrumb-item"><a href="../scripts/07_hdwgcna.html">7. Gene modules with hdWGCNA</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">snRNA-seq of Astrocytes in the ALS Spinal Cord</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Overview</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Short-read analysis</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/01_subsetting_astros.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">1. Subsetting Astrocytes</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/02_clustering.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">2. Discrete clustering</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/03_trajectory_slingshot.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">3. Trajectory inference with Slingshot</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/04_trajectory_tradeseq.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">4. DE across Slingshot’s trajectories with tradeSeq</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/05_trajectory_monocle3.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">5. Trajectory inference with Monocle3</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/06_milo.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">6. Differential abundance with Milo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/07_hdwgcna.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">7. Gene modules with hdWGCNA</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Long-read analysis</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/08_astrocyte_junction_seurat.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">8. Creating the astrocyte-junction Seurat</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/09_junction_de-cluster.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">9. Junction differential expression; between astrocyte clusters</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/10_junction_de-pseudobulk.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">10. Junction differential expression; ALS vs control (pseudobulk)</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Figure assembly</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../scripts/11_assemble_manuscript_figures.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">11. Assemble manuscript figures</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="2">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#about-this-analysis" id="toc-about-this-analysis" class="nav-link active" data-scroll-target="#about-this-analysis">About this analysis</a></li>
+  <li><a href="#preparation" id="toc-preparation" class="nav-link" data-scroll-target="#preparation">Preparation</a>
+  <ul class="collapse">
+  <li><a href="#prerequisites" id="toc-prerequisites" class="nav-link" data-scroll-target="#prerequisites">Prerequisites</a>
+  <ul class="collapse">
+  <li><a href="#packages" id="toc-packages" class="nav-link" data-scroll-target="#packages">Packages</a></li>
+  <li><a href="#directories" id="toc-directories" class="nav-link" data-scroll-target="#directories">Directories</a></li>
+  </ul></li>
+  <li><a href="#defining-variables" id="toc-defining-variables" class="nav-link" data-scroll-target="#defining-variables">Defining variables</a></li>
+  <li><a href="#helper-functions" id="toc-helper-functions" class="nav-link" data-scroll-target="#helper-functions">Helper functions</a>
+  <ul class="collapse">
+  <li><a href="#theme_quarto-and-theme_manuscript" id="toc-theme_quarto-and-theme_manuscript" class="nav-link" data-scroll-target="#theme_quarto-and-theme_manuscript">theme_quarto() and theme_manuscript()</a></li>
+  <li><a href="#save_plot" id="toc-save_plot" class="nav-link" data-scroll-target="#save_plot">save_plot()</a></li>
+  <li><a href="#print_tabset" id="toc-print_tabset" class="nav-link" data-scroll-target="#print_tabset">print_tabset()</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#preparing-the-seurat-object" id="toc-preparing-the-seurat-object" class="nav-link" data-scroll-target="#preparing-the-seurat-object">Preparing the Seurat object</a></li>
+  <li><a href="#hdwgcna-preprocessing" id="toc-hdwgcna-preprocessing" class="nav-link" data-scroll-target="#hdwgcna-preprocessing">hdWGCNA preprocessing</a>
+  <ul class="collapse">
+  <li><a href="#selecting-genes" id="toc-selecting-genes" class="nav-link" data-scroll-target="#selecting-genes">Selecting genes</a></li>
+  <li><a href="#constructing-metacells" id="toc-constructing-metacells" class="nav-link" data-scroll-target="#constructing-metacells">Constructing metacells</a></li>
+  <li><a href="#setting-the-expression-matrix" id="toc-setting-the-expression-matrix" class="nav-link" data-scroll-target="#setting-the-expression-matrix">Setting the expression matrix</a></li>
+  </ul></li>
+  <li><a href="#selecting-the-soft-power-threshold" id="toc-selecting-the-soft-power-threshold" class="nav-link" data-scroll-target="#selecting-the-soft-power-threshold">Selecting the soft power threshold</a></li>
+  <li><a href="#constructing-the-co-expression-network" id="toc-constructing-the-co-expression-network" class="nav-link" data-scroll-target="#constructing-the-co-expression-network">Constructing the co-expression network</a></li>
+  <li><a href="#module-eigengenes-and-connectivity" id="toc-module-eigengenes-and-connectivity" class="nav-link" data-scroll-target="#module-eigengenes-and-connectivity">Module eigengenes and connectivity</a>
+  <ul class="collapse">
+  <li><a href="#module-eigengenes" id="toc-module-eigengenes" class="nav-link" data-scroll-target="#module-eigengenes">Module eigengenes</a></li>
+  <li><a href="#module-connectivity" id="toc-module-connectivity" class="nav-link" data-scroll-target="#module-connectivity">Module connectivity</a></li>
+  </ul></li>
+  <li><a href="#extracting-hub-genes-and-module-assignments" id="toc-extracting-hub-genes-and-module-assignments" class="nav-link" data-scroll-target="#extracting-hub-genes-and-module-assignments">Extracting hub genes and module assignments</a></li>
+  <li><a href="#visualizing-module-eigengenes-on-the-umap" id="toc-visualizing-module-eigengenes-on-the-umap" class="nav-link" data-scroll-target="#visualizing-module-eigengenes-on-the-umap">Visualizing module eigengenes on the UMAP</a></li>
+  <li><a href="#saving-the-hdwgcna-object" id="toc-saving-the-hdwgcna-object" class="nav-link" data-scroll-target="#saving-the-hdwgcna-object">Saving the hdWGCNA object</a></li>
+  <li><a href="#session-info" id="toc-session-info" class="nav-link" data-scroll-target="#session-info">Session info</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../scripts/01_subsetting_astros.html">Short-read analysis</a></li><li class="breadcrumb-item"><a href="../scripts/07_hdwgcna.html">7. Gene modules with hdWGCNA</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">7. Gene modules with hdWGCNA</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Niels Boersbroek </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 2, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="about-this-analysis" class="level1">
+<h1>About this analysis</h1>
+<p>This script identifies co-expression modules in the astrocytes with hdWGCNA, the high-dimensional version of WGCNA for single-cell data. Because single-nuclei data is sparse, hdWGCNA first aggregates similar cells into <em>metacells</em>, then builds a co-expression network on them, and finally assigns genes to modules. The modules are examined (hub genes, module eigengenes on the UMAP).</p>
+<p>Unfortunately, not too much time to investigate this. I planned on running GO-terms on it all, but did not manage to do so.</p>
+</section>
+<section id="preparation" class="level1">
+<h1>Preparation</h1>
+<section id="prerequisites" class="level2">
+<h2 class="anchored" data-anchor-id="prerequisites">Prerequisites</h2>
+<p>This script was run with the <em>conda environment</em> <code>r_scrnaseq_core</code>.</p>
+<section id="packages" class="level3">
+<h3 class="anchored" data-anchor-id="packages">Packages</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Basics</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(patchwork)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(knitr)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Analysis-specific</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(Seurat)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(WGCNA)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(hdWGCNA)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(msigdbr) <span class="co"># For loading in GO-terms</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(fgsea) <span class="co"># For running GSEA</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="directories" class="level3">
+<h3 class="anchored" data-anchor-id="directories">Directories</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Get string of home directory. I used the here package, which sets the home</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># directory when loading library(here)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>dir_home <span class="ot">&lt;-</span> here<span class="sc">::</span><span class="fu">here</span>()</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="do">## Data directories</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>dir_data <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_home, <span class="st">"data/processed"</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Directory for the topological overlap matrix (TOM). </span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># In the analysis, hdWGCNA creates a large binary file called the TOM file,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># which I'll store in a temporary folder</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>dir_tom <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_home, <span class="st">"data/temporary/hdwgcna_tom"</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(dir_tom, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="do">## Results directories</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Create subfolders with the name of this script, so all figures/tables of</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="co"># this script are in the same place</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>folder_name <span class="ot">&lt;-</span> knitr<span class="sc">::</span><span class="fu">current_input</span>(<span class="at">dir =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>folder_name <span class="ot">&lt;-</span> <span class="fu">str_remove</span>(folder_name, <span class="st">"</span><span class="sc">\\</span><span class="st">.</span><span class="sc">\\</span><span class="st">w*$"</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>dir_fig <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_home, <span class="st">"results/figures"</span>, folder_name)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(dir_fig, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>dir_tab <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_home, <span class="st">"results/tables"</span>, folder_name)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(dir_tab, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="do">## Manuscript figure directory </span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="co"># rds/grob objects for report figures land here, to be assembled by</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="co"># scripts/11_assemble_manuscript_figures.qmd</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>dir_man <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_home, <span class="st">"results/figures/manuscript"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="defining-variables" class="level2">
+<h2 class="anchored" data-anchor-id="defining-variables">Defining variables</h2>
+<p>This code block defines variables to be used throughout the rest of the document. If someone ever wants to run these scripts with different variables, they can easily change it here. I’ll substantiate any choices here.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Input: clustered astrocyte Seurat object (made in 02_clustering.qmd)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>file_seurat <span class="ot">&lt;-</span> <span class="st">"seu_shortread_astros_clustered.rds"</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Seurat metadata column with the sample ID</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>col_sample <span class="ot">&lt;-</span> <span class="st">"AnonymousID"</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Reductions in the Seurat object</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>reduction_harmony <span class="ot">&lt;-</span> <span class="st">"harmony"</span> <span class="co"># used to find similar cells for metacells</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>reduction_umap <span class="ot">&lt;-</span> <span class="st">"umap"</span>    <span class="co"># used to plot module eigengenes</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co"># hdWGCNA settings</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>wgcna_name <span class="ot">&lt;-</span> <span class="st">"wgcna"</span>      <span class="co"># name of the hdWGCNA experiment in the object</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>gene_fraction <span class="ot">&lt;-</span> <span class="fl">0.05</span>      <span class="co"># keep genes expressed in at least 5% of cells</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>k_metacells <span class="ot">&lt;-</span> <span class="dv">25</span>          <span class="co"># number of cells aggregated per metacell (default)</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>network_type <span class="ot">&lt;-</span> <span class="st">"signed"</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>soft_power <span class="ot">&lt;-</span> <span class="dv">12</span>           <span class="co"># lowest power with SFT model fit &gt;= 0.8 (see</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>                           <span class="co"># fig-01-soft-powers; [CHECK] re-check this if the</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>                           <span class="co"># input object or settings change!)</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>module_prefix <span class="ot">&lt;-</span> <span class="st">"AST-M"</span>   <span class="co"># modules are renamed to AST-M1, AST-M2, ...</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>n_hubs <span class="ot">&lt;-</span> <span class="dv">10</span>               <span class="co"># hub genes to extract per module</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>seed <span class="ot">&lt;-</span> <span class="dv">42</span>                 <span class="co"># metacell construction is random, so I set a seed</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="helper-functions" class="level2">
+<h2 class="anchored" data-anchor-id="helper-functions">Helper functions</h2>
+<details>
+<summary>
+<em>Click here to view the helper functions of this document</em>
+</summary>
+<section id="theme_quarto-and-theme_manuscript" class="level3">
+<h3 class="anchored" data-anchor-id="theme_quarto-and-theme_manuscript">theme_quarto() and theme_manuscript()</h3>
+<p>I created my own themes to add to figures. <code>theme_quarto()</code> is used to add themes to figures as displayed in the Quarto document and saved to disk as <code>.pdf</code> or <code>.png</code>. <code>theme_manuscript()</code> is used to add themes to figures as they will end up in the manuscript. I can already add arguments with <code>theme()</code> or specific themes (e.g.&nbsp;<code>theme_classic()</code>, my personal favourite) to plots; adding <code>theme()</code> afterwards keeps whatever was added in <code>theme()</code> before it, unless I specify that arugment here - that’s why I allowed to specify some things within my functions as well.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>theme_quarto <span class="ot">&lt;-</span> <span class="cf">function</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend_position =</span> <span class="st">"right"</span>, </span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">plot_title =</span> <span class="fu">element_blank</span>()</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    ) {</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">plot.title =</span> plot_title,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">legend.position =</span> legend_position</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>theme_manuscript <span class="ot">&lt;-</span> <span class="cf">function</span>(</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend_position =</span> <span class="st">"none"</span>,</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">plot_title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">axis_title_size =</span> <span class="dv">8</span>,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">axis_text_size =</span> <span class="dv">6</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    ) {</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">plot.title =</span> plot_title,</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>      <span class="at">legend.position =</span> legend_position,</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>      <span class="at">axis.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> axis_title_size),</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>      <span class="at">axis.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> axis_text_size),</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>      <span class="at">legend.key.size =</span> <span class="fu">unit</span>(<span class="fl">0.4</span>, <span class="st">"cm"</span>), </span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>      <span class="at">legend.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">8</span>),</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>      <span class="at">legend.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">9</span>)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="save_plot" class="level3">
+<h3 class="anchored" data-anchor-id="save_plot">save_plot()</h3>
+<p>This document displays all the figures I make, but I also want them saved to disk — both as <code>.png</code> and <code>.pdf</code>. I only need to provide the ggplot object, a filename (without extension), and optionally the width and height of the figure and additional arguments put into themes.</p>
+<p>The figures for my written report contain subfigures spread across multiple scripts. Since I want to assemble these panel figures via R code rather than by hand, <code>save_plot()</code> can also optionally save the plot object itself to disk as an .rds file, for a final script to later combine with <code>patchwork</code>. Set figure to the name the figure should carry in the report (e.g.&nbsp;<code>"SF1A"</code>) to trigger this; leave it <code>NULL</code> (the default) to just save the <code>.png</code>/<code>.pdf</code> as normal.</p>
+<p>A live ggplot object carries its underlying data along with it — for plots built from large Seurat objects, this can balloon the saved file to gigabytes. To avoid this, <code>save_plot()</code> converts the object to a grob (a static, pre-rendered drawing, with no data attached) before saving it as <code>.rds</code>. This is controlled by the <code>grob</code> argument, and defaults to <code>TRUE</code>, since converting a small plot costs nothing but forgetting to convert a large one is expensive. Set <code>grob = FALSE</code> only if a later step specifically needs the original, live ggplot object rather than its rendered form.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>save_plot <span class="ot">&lt;-</span> <span class="cf">function</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    p, filename, </span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> <span class="dv">10</span>, <span class="at">height =</span> <span class="dv">6</span>, </span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">figure =</span> <span class="cn">NULL</span>, <span class="at">grob =</span> <span class="cn">TRUE</span>, <span class="at">apply_theme =</span> <span class="cn">TRUE</span>, </span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">add_tag =</span> <span class="cn">TRUE</span>, <span class="at">tag_text_size =</span> <span class="dv">14</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend_pos_manuscript =</span> <span class="st">"none"</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    ) {</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="do">## Save image on disk as png and pdf</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Add Quarto-specific theme, unless the plot has its own custom theme</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (apply_theme) {</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    p_image <span class="ot">&lt;-</span> p <span class="sc">+</span> <span class="fu">theme_quarto</span>()</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    p_image <span class="ot">&lt;-</span> p</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  file_png <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_fig, <span class="fu">paste0</span>(filename, <span class="st">".png"</span>))</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggsave</span>(file_png, p_image, <span class="at">width =</span> width, <span class="at">height =</span> height, <span class="at">dpi =</span> <span class="dv">150</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>  file_pdf <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_fig, <span class="fu">paste0</span>(filename, <span class="st">".pdf"</span>))</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggsave</span>(file_pdf, p_image, <span class="at">width =</span> width, <span class="at">height =</span> height, <span class="at">dpi =</span> <span class="dv">150</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  <span class="do">## Save the ggplot object on disk as an rds file </span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(figure)) {</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Add tag if needed</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (add_tag) {</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>      tag <span class="ot">&lt;-</span> <span class="fu">str_extract</span>(figure, <span class="st">"[A-Z]$"</span>)</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>      p <span class="ot">&lt;-</span> p <span class="sc">+</span> </span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>        <span class="fu">labs</span>(<span class="at">tag =</span> tag) <span class="sc">+</span> </span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="fu">theme</span>(</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>          <span class="at">plot.tag =</span> <span class="fu">element_text</span>(</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>            <span class="at">face =</span> <span class="st">"bold"</span>, </span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>            <span class="at">size =</span> tag_text_size, </span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>            <span class="at">hjust =</span> <span class="dv">0</span>, <span class="at">vjust =</span> <span class="dv">0</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Add manuscript-specific theme, unless the plot has its own custom theme</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (apply_theme) {</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>      p <span class="ot">&lt;-</span> p <span class="sc">+</span> <span class="fu">theme_manuscript</span>(<span class="at">legend_position =</span> legend_pos_manuscript)</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    file_rds <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_man, <span class="fu">paste0</span>(figure, <span class="st">".rds"</span>))</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Convert the object to a grob if needed</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (grob) {</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>      p <span class="ot">&lt;-</span> <span class="fu">ggplotGrob</span>(p)</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Save on disk</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="fu">saveRDS</span>(p, file_rds)</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="print_tabset" class="level3">
+<h3 class="anchored" data-anchor-id="print_tabset">print_tabset()</h3>
+<p>Quarto cannot cross-reference figures that are made inside a loop. To still display the plots of a loop in this document, I collect them in a named list and show them as tabs with <code>print_tabset()</code>. The names of the list become the tab titles. It also accepts data frames (shown as a table). This function writes raw Quarto markdown, so the chunk that calls it needs the chunk option <code>#| output: asis</code>. <code>heading_level</code> should be one deeper than the heading above the chunk.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>print_tabset <span class="ot">&lt;-</span> <span class="cf">function</span>(obj_list, <span class="at">heading_level =</span> <span class="dv">3</span>) {</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"::: {.panel-tabset}</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (nm <span class="cf">in</span> <span class="fu">names</span>(obj_list)) {</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">strrep</span>(<span class="st">"#"</span>, heading_level), <span class="st">" "</span>, nm, <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>, <span class="at">sep =</span> <span class="st">""</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    obj <span class="ot">&lt;-</span> obj_list[[nm]]</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">inherits</span>(obj, <span class="st">"ggplot"</span>)) {</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">print</span>(obj)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">is.data.frame</span>(obj)) {</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>      <span class="fu">cat</span>(knitr<span class="sc">::</span><span class="fu">kable</span>(obj, <span class="at">format =</span> <span class="st">"pipe"</span>), <span class="at">sep =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">":::</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section></details>
+</section>
+</section>
+
+<section id="preparing-the-seurat-object" class="level1">
+<h1>Preparing the Seurat object</h1>
+<p>I load the clustered astrocyte Seurat object from disk.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="fu">file.path</span>(dir_data, file_seurat))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Run UpdateSeuratObject, as indicated in hdWGCNA vignette</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">UpdateSeuratObject</span>(seu)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="hdwgcna-preprocessing" class="level1">
+<h1>hdWGCNA preprocessing</h1>
+<section id="selecting-genes" class="level2">
+<h2 class="anchored" data-anchor-id="selecting-genes">Selecting genes</h2>
+<p>I select genes by fraction, as I only want to include genes expressed in at least 5% of cells (as defined under the header <strong>Define Variables</strong>).</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">SetupForWGCNA</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">gene_select =</span> <span class="st">"fraction"</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">fraction =</span> gene_fraction,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">wgcna_name =</span> wgcna_name <span class="co"># stored as the name of the hdWGCNA experiment</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="constructing-metacells" class="level2">
+<h2 class="anchored" data-anchor-id="constructing-metacells">Constructing metacells</h2>
+<p>Metacells are constructed in each group. Normally, one groups by sample and cell type, but as all cells are astrocytes, I only group by sample (<code>AnonymousID</code>).</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Metacell construction is stochastic, so I set a seed (for reproducibility)</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(seed)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">MetacellsByGroups</span>(</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seu,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">group.by =</span> col_sample,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">ident.group =</span> col_sample,</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">reduction =</span> reduction_harmony,</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">k =</span> k_metacells</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Normalize metacell expression matrix</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">NormalizeMetacells</span>(seu)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="setting-the-expression-matrix" class="level2">
+<h2 class="anchored" data-anchor-id="setting-the-expression-matrix">Setting the expression matrix</h2>
+<p>I make sure the right assay and layer are used. This should be the default, but I specify <code>RNA</code> and <code>data</code> to be sure.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">SetDatExpr</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">assay =</span> <span class="st">"RNA"</span>,</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">layer =</span> <span class="st">"data"</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="selecting-the-soft-power-threshold" class="level1">
+<h1>Selecting the soft power threshold</h1>
+<p>The soft power threshold is extremely important in WGCNA: it acts as a Boolean-like threshold separating strong from weak connections in the correlation matrix, a step essential to reduce noise. <code>TestSoftPowers()</code> runs a parameter sweep. One should pick the lowest soft power with a scale-free topology (SFT) model fit greater than or equal to 0.8. In my case, that was at 12, so I set that as the threshold.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">TestSoftPowers</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">networkType =</span> network_type</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pickSoftThreshold: will use block size 3983.
+ pickSoftThreshold: calculating connectivity for given powers...
+   ..working on genes 1 through 3983 of 11232</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   ..working on genes 3984 through 7966 of 11232</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   ..working on genes 7967 through 11232 of 11232</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   Power SFT.R.sq   slope truncated.R.sq  mean.k. median.k.  max.k.
+1      1 3.07e-01 13.6000          0.925 5.88e+03  5.90e+03 6470.00
+2      2 7.13e-02  2.9900          0.914 3.13e+03  3.13e+03 3810.00
+3      3 4.67e-06  0.0158          0.939 1.69e+03  1.67e+03 2290.00
+4      4 2.90e-02 -0.9270          0.962 9.21e+02  9.03e+02 1400.00
+5      5 1.30e-01 -1.5800          0.962 5.10e+02  4.93e+02  873.00
+6      6 2.87e-01 -2.0300          0.957 2.86e+02  2.72e+02  558.00
+7      7 4.71e-01 -2.4000          0.968 1.62e+02  1.52e+02  363.00
+8      8 6.22e-01 -2.5900          0.979 9.34e+01  8.55e+01  240.00
+9      9 7.29e-01 -2.7000          0.989 5.44e+01  4.85e+01  161.00
+10    10 7.95e-01 -2.7800          0.995 3.22e+01  2.78e+01  110.00
+11    12 8.51e-01 -2.6900          0.998 1.17e+01  9.37e+00   53.30
+12    14 8.67e-01 -2.6000          0.998 4.51e+00  3.27e+00   26.90
+13    16 8.78e-01 -2.4400          0.997 1.84e+00  1.17e+00   14.10
+14    18 9.08e-01 -2.2000          0.994 7.92e-01  4.31e-01    7.58
+15    20 9.13e-01 -2.2100          0.996 3.61e-01  1.63e-01    4.94
+16    22 9.21e-01 -2.2200          0.992 1.74e-01  6.31e-02    3.53
+17    24 9.42e-01 -2.1400          0.986 8.90e-02  2.50e-02    2.73
+18    26 9.35e-01 -2.1300          0.972 4.80e-02  9.91e-03    2.46
+19    28 9.52e-01 -2.0000          0.972 2.73e-02  4.06e-03    2.22
+20    30 9.69e-01 -1.8600          0.980 1.64e-02  1.68e-03    2.01</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>plot_list_powers <span class="ot">&lt;-</span> <span class="fu">PlotSoftPowers</span>(seu)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Power     SFT.R.sq      slope truncated.R.sq   mean.k. median.k.    max.k.
+1     1 3.067619e-01 13.6116545      0.9254015 5884.9694 5896.6457 6469.2419
+2     2 7.132707e-02  2.9929792      0.9140211 3128.4666 3125.3358 3808.3326
+3     3 4.672776e-06  0.0158110      0.9391267 1686.0758 1671.3531 2286.7181
+4     4 2.904582e-02 -0.9273132      0.9618911  920.8726  902.7482 1398.1843
+5     5 1.297977e-01 -1.5768376      0.9618911  509.5704  493.1384  872.6396
+6     6 2.871067e-01 -2.0337777      0.9574240  285.6660  272.1695  558.0560</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>p_soft_powers <span class="ot">&lt;-</span> <span class="fu">wrap_plots</span>(plot_list_powers, <span class="at">ncol =</span> <span class="dv">2</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>p_soft_powers</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div id="fig-01-soft-powers" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-01-soft-powers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07_hdwgcna_files/figure-html/fig-01-soft-powers-1.png" class="img-fluid figure-img" width="960">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-01-soft-powers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: Parameter sweep of soft power thresholds: scale-free topology model fit and mean connectivity per power.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>I also save the results as a table so I can inspect the exact numbers. The soft power I chose (<code>soft_power</code>, defined at the top) is the lowest power with an SFT model fit of at least 0.8.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>power_table <span class="ot">&lt;-</span> <span class="fu">GetPowerTable</span>(seu)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(power_table, <span class="fu">file.path</span>(dir_tab, <span class="st">"power_table.csv"</span>))</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(power_table)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 7%">
+<col style="width: 12%">
+<col style="width: 13%">
+<col style="width: 18%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 15%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Power</th>
+<th style="text-align: right;">SFT.R.sq</th>
+<th style="text-align: right;">slope</th>
+<th style="text-align: right;">truncated.R.sq</th>
+<th style="text-align: right;">mean.k.</th>
+<th style="text-align: right;">median.k.</th>
+<th style="text-align: right;">max.k.</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0.3067619</td>
+<td style="text-align: right;">13.6116545</td>
+<td style="text-align: right;">0.9254015</td>
+<td style="text-align: right;">5884.9693908</td>
+<td style="text-align: right;">5896.6457094</td>
+<td style="text-align: right;">6469.241909</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0.0713271</td>
+<td style="text-align: right;">2.9929792</td>
+<td style="text-align: right;">0.9140211</td>
+<td style="text-align: right;">3128.4666047</td>
+<td style="text-align: right;">3125.3357835</td>
+<td style="text-align: right;">3808.332567</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0.0000047</td>
+<td style="text-align: right;">0.0158110</td>
+<td style="text-align: right;">0.9391267</td>
+<td style="text-align: right;">1686.0757723</td>
+<td style="text-align: right;">1671.3530501</td>
+<td style="text-align: right;">2286.718128</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0.0290458</td>
+<td style="text-align: right;">-0.9273132</td>
+<td style="text-align: right;">0.9618911</td>
+<td style="text-align: right;">920.8725798</td>
+<td style="text-align: right;">902.7481509</td>
+<td style="text-align: right;">1398.184267</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">0.1297977</td>
+<td style="text-align: right;">-1.5768376</td>
+<td style="text-align: right;">0.9618911</td>
+<td style="text-align: right;">509.5703508</td>
+<td style="text-align: right;">493.1384285</td>
+<td style="text-align: right;">872.639562</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">0.2871067</td>
+<td style="text-align: right;">-2.0337777</td>
+<td style="text-align: right;">0.9574240</td>
+<td style="text-align: right;">285.6660480</td>
+<td style="text-align: right;">272.1694851</td>
+<td style="text-align: right;">558.055995</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">0.4705977</td>
+<td style="text-align: right;">-2.3985686</td>
+<td style="text-align: right;">0.9677113</td>
+<td style="text-align: right;">162.2465367</td>
+<td style="text-align: right;">151.7868920</td>
+<td style="text-align: right;">363.021425</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">0.6222047</td>
+<td style="text-align: right;">-2.5921902</td>
+<td style="text-align: right;">0.9793087</td>
+<td style="text-align: right;">93.3680048</td>
+<td style="text-align: right;">85.5478865</td>
+<td style="text-align: right;">239.847324</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">9</td>
+<td style="text-align: right;">0.7287809</td>
+<td style="text-align: right;">-2.6975144</td>
+<td style="text-align: right;">0.9892315</td>
+<td style="text-align: right;">54.4490057</td>
+<td style="text-align: right;">48.4912577</td>
+<td style="text-align: right;">161.083067</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">0.7948755</td>
+<td style="text-align: right;">-2.7761316</td>
+<td style="text-align: right;">0.9945354</td>
+<td style="text-align: right;">32.1828921</td>
+<td style="text-align: right;">27.7653203</td>
+<td style="text-align: right;">110.130988</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.8512924</td>
+<td style="text-align: right;">-2.6879434</td>
+<td style="text-align: right;">0.9980210</td>
+<td style="text-align: right;">11.7146375</td>
+<td style="text-align: right;">9.3685850</td>
+<td style="text-align: right;">53.300672</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">14</td>
+<td style="text-align: right;">0.8665540</td>
+<td style="text-align: right;">-2.6012916</td>
+<td style="text-align: right;">0.9976614</td>
+<td style="text-align: right;">4.5087216</td>
+<td style="text-align: right;">3.2687723</td>
+<td style="text-align: right;">26.947048</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">0.8776009</td>
+<td style="text-align: right;">-2.4397381</td>
+<td style="text-align: right;">0.9965836</td>
+<td style="text-align: right;">1.8363778</td>
+<td style="text-align: right;">1.1739172</td>
+<td style="text-align: right;">14.089763</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">18</td>
+<td style="text-align: right;">0.9078703</td>
+<td style="text-align: right;">-2.2014785</td>
+<td style="text-align: right;">0.9943565</td>
+<td style="text-align: right;">0.7917556</td>
+<td style="text-align: right;">0.4310302</td>
+<td style="text-align: right;">7.575857</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">0.9134382</td>
+<td style="text-align: right;">-2.2135984</td>
+<td style="text-align: right;">0.9959568</td>
+<td style="text-align: right;">0.3613066</td>
+<td style="text-align: right;">0.1625149</td>
+<td style="text-align: right;">4.944204</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">22</td>
+<td style="text-align: right;">0.9205618</td>
+<td style="text-align: right;">-2.2187932</td>
+<td style="text-align: right;">0.9917753</td>
+<td style="text-align: right;">0.1744258</td>
+<td style="text-align: right;">0.0631079</td>
+<td style="text-align: right;">3.530126</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">0.9422416</td>
+<td style="text-align: right;">-2.1408486</td>
+<td style="text-align: right;">0.9863890</td>
+<td style="text-align: right;">0.0890224</td>
+<td style="text-align: right;">0.0249613</td>
+<td style="text-align: right;">2.732867</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">26</td>
+<td style="text-align: right;">0.9348869</td>
+<td style="text-align: right;">-2.1329618</td>
+<td style="text-align: right;">0.9721130</td>
+<td style="text-align: right;">0.0479912</td>
+<td style="text-align: right;">0.0099084</td>
+<td style="text-align: right;">2.456850</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">0.9519419</td>
+<td style="text-align: right;">-2.0002171</td>
+<td style="text-align: right;">0.9723562</td>
+<td style="text-align: right;">0.0272952</td>
+<td style="text-align: right;">0.0040576</td>
+<td style="text-align: right;">2.216904</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">0.9686957</td>
+<td style="text-align: right;">-1.8649858</td>
+<td style="text-align: right;">0.9798997</td>
+<td style="text-align: right;">0.0163513</td>
+<td style="text-align: right;">0.0016777</td>
+<td style="text-align: right;">2.005405</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="constructing-the-co-expression-network" class="level1">
+<h1>Constructing the co-expression network</h1>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">ConstructNetwork</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">soft_power =</span> soft_power, <span class="co"># selected based on TestSoftPowers()</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">tom_name =</span> <span class="st">"hdwgcna_astros"</span>,</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">tom_outdir =</span> dir_tom,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">overwrite_tom =</span> <span class="cn">TRUE</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> Calculating consensus modules and module eigengenes block-wise from all genes
+ Calculating topological overlaps block-wise from all genes
+   Flagging genes and samples with too many missing values...
+    ..step 1
+    TOM calculation: adjacency..
+    ..will not use multithreading.
+     Fraction of slow calculations: 0.000000
+    ..connectivity..
+    ..matrix multiplication (system BLAS)..
+    ..normalization..
+    ..done.
+ ..Working on block 1 .
+ ..Working on block 1 .
+ ..merging consensus modules that are too close..</code></pre>
+</div>
+</div>
+<p>The network is visualized with a dendrogram. <code>PlotDendrogram()</code> uses a WGCNA function that predates ggplot2, so it does not return a ggplot object and needs a different way of saving to disk.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">PlotDendrogram</span>(seu, <span class="at">main =</span> <span class="st">"Astros hdWGCNA Dendrogram"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div id="fig-02-dendrogram" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-02-dendrogram-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07_hdwgcna_files/figure-html/fig-02-dendrogram-1.png" class="img-fluid figure-img" width="960">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-02-dendrogram-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: Dendrogram of the astrocyte co-expression network, with genes coloured by module.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>png 
+  2 </code></pre>
+</div>
+</div>
+</section>
+<section id="module-eigengenes-and-connectivity" class="level1">
+<h1>Module eigengenes and connectivity</h1>
+<section id="module-eigengenes" class="level2">
+<h2 class="anchored" data-anchor-id="module-eigengenes">Module eigengenes</h2>
+<p>Module eigengenes summarize the expression of each module per cell. I harmonize them by sample.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">ModuleEigengenes</span>(</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">group.by.vars =</span> col_sample</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "grey"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "cyan"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "brown"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "red"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "turquoise"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "green"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "black"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "purple"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "yellow"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "greenyellow"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "lightcyan"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "blue"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "midnightblue"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "salmon"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "magenta"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "pink"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "tan"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing centroids</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract harmonized module eigengenes</span></span>
+<span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>eigengenes <span class="ot">&lt;-</span> <span class="fu">GetMEs</span>(seu)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="module-connectivity" class="level2">
+<h2 class="anchored" data-anchor-id="module-connectivity">Module connectivity</h2>
+<p>I compute the eigengene-based connectivity (kME) of each gene to each module, and rename the modules.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">ModuleConnectivity</span>(seu)</span>
+<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a>seu <span class="ot">&lt;-</span> <span class="fu">ResetModuleNames</span>(</span>
+<span id="cb60-4"><a href="#cb60-4" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb60-5"><a href="#cb60-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">new_name =</span> module_prefix</span>
+<span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>p_kme <span class="ot">&lt;-</span> <span class="fu">PlotKMEs</span>(seu, <span class="at">ncol =</span> <span class="dv">5</span>)</span>
+<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a>p_kme</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div id="fig-03-kme-ranked" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-03-kme-ranked-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07_hdwgcna_files/figure-html/fig-03-kme-ranked-1.png" class="img-fluid figure-img" width="960">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-03-kme-ranked-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: Genes ranked by kME for each module.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="extracting-hub-genes-and-module-assignments" class="level1">
+<h1>Extracting hub genes and module assignments</h1>
+<p>Hub genes are the genes with the highest kME in each module.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a>hub_df <span class="ot">&lt;-</span> <span class="fu">GetHubGenes</span>(seu, <span class="at">n_hubs =</span> n_hubs)</span>
+<span id="cb62-2"><a href="#cb62-2" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(hub_df, <span class="fu">file.path</span>(dir_tab, <span class="st">"hub_genes.csv"</span>))</span>
+<span id="cb62-3"><a href="#cb62-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">head</span>(hub_df, <span class="dv">10</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">gene_name</th>
+<th style="text-align: left;">module</th>
+<th style="text-align: right;">kME</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">CPAMD8</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.4872671</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ABR</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.4853078</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">AHNAK</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.4088209</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">GFAP</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.3999356</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ITGB4</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.3969229</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">SNRNP70</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.3935310</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">GSE1</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.3434680</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">CLIP2</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.3059984</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">PLEC</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.2734910</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">RABGEF1</td>
+<td style="text-align: left;">AST-M1</td>
+<td style="text-align: right;">0.2707595</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>The module assignment table links each gene to its module.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a>modules <span class="ot">&lt;-</span> <span class="fu">GetModules</span>(seu)</span>
+<span id="cb63-2"><a href="#cb63-2" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(modules, <span class="fu">file.path</span>(dir_tab, <span class="st">"module_assignment_table.csv"</span>))</span>
+<span id="cb63-3"><a href="#cb63-3" aria-hidden="true" tabindex="-1"></a><span class="fu">table</span>(modules<span class="sc">$</span>module)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+   grey  AST-M1  AST-M2  AST-M3  AST-M4  AST-M5  AST-M6  AST-M7  AST-M8  AST-M9 
+   8226      60     378     176     613     198     174     110     236      99 
+AST-M10 AST-M11 AST-M12 AST-M13 AST-M14 AST-M15 AST-M16 
+     51     422      52      63     133     144      97 </code></pre>
+</div>
+</div>
+</section>
+<section id="visualizing-module-eigengenes-on-the-umap" class="level1">
+<h1>Visualizing module eigengenes on the UMAP</h1>
+<p>A feature plot of the harmonized module eigengenes (hMEs) for each module, ordered so cells with the highest hMEs are plotted on top.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>plot_list_mes <span class="ot">&lt;-</span> <span class="fu">ModuleFeaturePlot</span>(</span>
+<span id="cb65-2"><a href="#cb65-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb65-3"><a href="#cb65-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">reduction =</span> reduction_umap,</span>
+<span id="cb65-4"><a href="#cb65-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">features =</span> <span class="st">"hMEs"</span>, <span class="co"># plot the hMEs</span></span>
+<span id="cb65-5"><a href="#cb65-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">order =</span> <span class="cn">TRUE</span> <span class="co"># order so the points with highest hMEs are on top</span></span>
+<span id="cb65-6"><a href="#cb65-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "AST-M1"</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "AST-M2"
+[1] "AST-M3"
+[1] "AST-M4"
+[1] "AST-M5"
+[1] "AST-M6"
+[1] "AST-M7"
+[1] "AST-M8"
+[1] "AST-M9"
+[1] "AST-M10"
+[1] "AST-M11"
+[1] "AST-M12"
+[1] "AST-M13"
+[1] "AST-M14"
+[1] "AST-M15"
+[1] "AST-M16"</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb68"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>p_module_features <span class="ot">&lt;-</span> <span class="fu">wrap_plots</span>(plot_list_mes, <span class="at">ncol =</span> <span class="dv">6</span>)</span>
+<span id="cb68-2"><a href="#cb68-2" aria-hidden="true" tabindex="-1"></a>p_module_features</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div id="fig-04-module-feature-plot" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-04-module-feature-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07_hdwgcna_files/figure-html/fig-04-module-feature-plot-1.png" class="img-fluid figure-img" width="1344">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-04-module-feature-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: Harmonized module eigengenes (hMEs) of each module on the astrocyte UMAP.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb69"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a>p_module_radar <span class="ot">&lt;-</span> <span class="fu">ModuleRadarPlot</span>(</span>
+<span id="cb69-2"><a href="#cb69-2" aria-hidden="true" tabindex="-1"></a>  seu,</span>
+<span id="cb69-3"><a href="#cb69-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">group.by =</span> <span class="st">'annotation'</span>,</span>
+<span id="cb69-4"><a href="#cb69-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.label.size=</span><span class="dv">4</span>,</span>
+<span id="cb69-5"><a href="#cb69-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">grid.label.size=</span><span class="dv">4</span></span>
+<span id="cb69-6"><a href="#cb69-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb69-7"><a href="#cb69-7" aria-hidden="true" tabindex="-1"></a>p_module_radar</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div id="fig-xx-moduleradarplot" class="quarto-float quarto-figure quarto-figure-center anchored" width="960">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-xx-moduleradarplot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="07_hdwgcna_files/figure-html/fig-xx-moduleradarplot-1.png" id="fig-xx-moduleradarplot" class="img-fluid figure-img" width="960">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned" id="fig-xx-moduleradarplot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>I planned to examine the modules with GO-terms, but in general, I did not have much time to examine hdWGCNA so I did not get to that…</p>
+</section>
+<section id="saving-the-hdwgcna-object" class="level1">
+<h1>Saving the hdWGCNA object</h1>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb70"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(seu, <span class="fu">file.path</span>(dir_data, <span class="st">"seu_shortread_astros_hdwgcna.rds"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="session-info" class="level1">
+<h1>Session info</h1>
+<p>I used the conda environment <code>r_scrnaseq_core</code> to run this script. You can find major package versions in the file <code>/environments/r_scrnaseq_core.yml</code>, but for full reproducibility, I’ll display all dependencies and package versions below.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb71"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>R version 4.4.3 (2025-02-28)
+Platform: x86_64-conda-linux-gnu
+Running under: Rocky Linux 8.10 (Green Obsidian)
+
+Matrix products: default
+BLAS/LAPACK: /path/to/folder/software/miniforge/miniforge3/envs/r_scrnaseq_core/lib/libopenblasp-r0.3.34.so;  LAPACK version 3.12.0
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+time zone: Europe/Amsterdam
+tzcode source: system (glibc)
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] ggradar_0.2                 fgsea_1.32.2               
+ [3] msigdbr_26.1.1              hdWGCNA_0.4.12             
+ [5] enrichR_3.4                 SummarizedExperiment_1.36.0
+ [7] Biobase_2.66.0              MatrixGenerics_1.18.0      
+ [9] matrixStats_1.5.0           GenomicRanges_1.58.0       
+[11] GenomeInfoDb_1.42.0         IRanges_2.40.0             
+[13] S4Vectors_0.44.0            BiocGenerics_0.52.0        
+[15] GeneOverlap_1.42.0          UCell_2.10.1               
+[17] tidygraph_1.3.0             ggraph_2.2.2               
+[19] igraph_2.3.3                ggrepel_0.9.8              
+[21] harmony_2.0.5               Rcpp_1.1.2                 
+[23] WGCNA_1.74                  fastcluster_1.3.0          
+[25] dynamicTreeCut_1.63-1       Seurat_5.5.1               
+[27] SeuratObject_5.4.0          sp_2.2-3                   
+[29] here_1.0.2                  knitr_1.52                 
+[31] patchwork_1.3.2             lubridate_1.9.5            
+[33] forcats_1.0.1               stringr_1.6.0              
+[35] dplyr_1.2.1                 purrr_1.2.2                
+[37] readr_2.2.0                 tidyr_1.3.2                
+[39] tibble_3.3.1                ggplot2_4.0.3              
+[41] tidyverse_2.0.0            
+
+loaded via a namespace (and not attached):
+  [1] spatstat.sparse_3.2-0       bitops_1.1-0               
+  [3] httr_1.4.9                  RColorBrewer_1.1-3         
+  [5] doParallel_1.0.17           tools_4.4.3                
+  [7] sctransform_0.4.3           backports_1.5.1            
+  [9] R6_2.6.1                    uwot_0.2.5                 
+ [11] withr_3.0.3                 gridExtra_2.3.1            
+ [13] preprocessCore_1.68.0       progressr_1.0.0            
+ [15] cli_3.6.6                   textshaping_1.0.5          
+ [17] spatstat.explore_3.8-2      fastDummies_1.7.6          
+ [19] labeling_0.4.3              S7_0.2.2                   
+ [21] spatstat.data_3.1-9         proxy_0.4-29               
+ [23] ggridges_0.5.7              pbapply_1.7-4              
+ [25] systemfonts_1.3.2           foreign_0.8-91             
+ [27] parallelly_1.48.0           WriteXLS_6.8.0             
+ [29] rstudioapi_0.19.0           impute_1.80.0              
+ [31] FNN_1.1.4.1                 generics_0.1.4             
+ [33] gtools_3.9.5                ica_1.0-3                  
+ [35] spatstat.random_3.5-1       vroom_1.7.1                
+ [37] Matrix_1.7-6                abind_1.4-8                
+ [39] lifecycle_1.0.5             yaml_2.3.12                
+ [41] gplots_3.3.0                SparseArray_1.6.0          
+ [43] Rtsne_0.17                  grid_4.4.3                 
+ [45] promises_1.5.0              crayon_1.5.3               
+ [47] miniUI_0.1.2                lattice_0.23-1             
+ [49] cowplot_1.2.0               pillar_1.11.1              
+ [51] rjson_0.2.23                future.apply_1.20.2        
+ [53] codetools_0.2-20            fastmatch_1.1-8            
+ [55] glue_1.8.1                  spatstat.univar_3.2-0      
+ [57] data.table_1.18.6.1         vctrs_0.7.3                
+ [59] png_0.1-9                   spam_2.11-4                
+ [61] gtable_0.3.6                assertthat_0.2.1           
+ [63] cachem_1.1.0                xfun_0.60                  
+ [65] S4Arrays_1.6.0              mime_0.13                  
+ [67] survival_3.8-12             SingleCellExperiment_1.28.0
+ [69] iterators_1.0.14            fitdistrplus_1.2-6         
+ [71] ROCR_1.0-12                 nlme_3.1-170               
+ [73] bit64_4.8.6                 RcppAnnoy_0.0.23           
+ [75] rprojroot_2.1.1             irlba_2.3.7                
+ [77] KernSmooth_2.23-27          otel_0.2.0                 
+ [79] rpart_4.1.27                colorspace_2.1-3           
+ [81] Hmisc_5.3-0                 nnet_7.3-21                
+ [83] tidyselect_1.2.1            bit_4.6.0                  
+ [85] compiler_4.4.3              curl_8.0.0                 
+ [87] htmlTable_2.5.0             BiocNeighbors_2.0.0        
+ [89] DelayedArray_0.32.0         plotly_4.12.1              
+ [91] checkmate_2.3.3             scales_1.4.0               
+ [93] caTools_1.18.4              lmtest_0.9-40              
+ [95] digest_0.6.39               goftest_1.2-3              
+ [97] spatstat.utils_3.2-5        rmarkdown_2.32             
+ [99] RhpcBLASctl_0.23-42         XVector_0.46.0             
+[101] htmltools_0.5.9             pkgconfig_2.0.3            
+[103] base64enc_0.1-6             fastmap_1.2.0              
+[105] rlang_1.3.0                 htmlwidgets_1.6.4          
+[107] UCSC.utils_1.2.0            shiny_1.14.0               
+[109] farver_2.1.2                zoo_1.9-0                  
+[111] jsonlite_2.0.0              BiocParallel_1.40.0        
+[113] magrittr_2.0.5              Formula_1.2-6              
+[115] GenomeInfoDbData_1.2.13     dotCall64_1.2              
+[117] viridis_0.6.5               reticulate_1.47.0          
+[119] stringi_1.8.9               zlibbioc_1.52.0            
+[121] MASS_7.3-66                 plyr_1.8.9                 
+[123] parallel_4.4.3              listenv_1.0.0              
+[125] deldir_2.0-4                graphlayouts_1.2.5         
+[127] splines_4.4.3               tensor_1.5.1               
+[129] hms_1.1.4                   spatstat.geom_3.8-2        
+[131] RcppHNSW_0.7.0              reshape2_1.4.5             
+[133] evaluate_1.0.5              tester_0.3.0               
+[135] tzdb_0.5.0                  foreach_1.5.2              
+[137] tweenr_2.0.3                httpuv_1.6.17              
+[139] RANN_2.6.2                  polyclip_1.10-7            
+[141] future_1.76.0               scattermore_1.2            
+[143] ggforce_0.5.0               xtable_1.8-8               
+[145] RSpectra_0.16-2             later_1.4.8                
+[147] viridisLite_0.4.3           ragg_1.5.2                 
+[149] memoise_2.0.1               cluster_2.1.8.3            
+[151] timechange_0.4.0            globals_0.19.1             </code></pre>
+</div>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../scripts/06_milo.html" class="pagination-link" aria-label="6. Differential abundance with Milo">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">6. Differential abundance with Milo</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../scripts/08_astrocyte_junction_seurat.html" class="pagination-link" aria-label="8. Creating the astrocyte-junction Seurat">
+        <span class="nav-page-text">8. Creating the astrocyte-junction Seurat</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
