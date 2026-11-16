@@ -6,7 +6,7 @@ The overarching project studies post-mortem spinal cord tissue of ALS patients a
 
 ## Rendered analysis
  
-Every script is a Quarto document, so you can read the full analysis (code, figures and the reasoning behind each step) without running anything: **[link to the Quarto site]**
+Every script is a Quarto document, so you can read the full analysis (code, figures and the reasoning behind each step) without running anything: **[link to Quarto output](https://NielsBoersbroek.github.io/mrp_snrnaseq_astrocytes_als/)**
  
 The site has one page per script, in the order they were run, with a sidebar to jump between pages and a table of contents for each page. The first page provides an overview, summarizing what each script does. This README also covers everything you need to run the scripts yourself.
 
